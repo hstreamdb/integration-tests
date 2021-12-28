@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-JAVA_FILES=$(find app/src/ -name "*.java")
+JAVA_FILES=$(find ../app/src/ -name "*.java")
 for JAVA_FILE in ${JAVA_FILES}
 do
  echo "formatting ${JAVA_FILE}"

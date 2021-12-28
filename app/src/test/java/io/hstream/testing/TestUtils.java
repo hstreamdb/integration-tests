@@ -9,6 +9,8 @@ import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.UUID;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import java.util.*;
+import org.junit.jupiter.api.Assertions;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -25,15 +27,24 @@ public class TestUtils {
     return streamName;
   }
 
-  public static String randSubscription(HStreamClient c, String streamName) {
+  public static String randSubscriptionWithOffset(
+      HStreamClient c, String streamName, SpecialOffset offset) {
     String subscriptionName = "test_subscription_" + randText();
     Subscription subscription =
         Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
-            .offset(new SubscriptionOffset(SpecialOffset.LATEST))
+            .offset(new SubscriptionOffset(offset))
             .ackTimeoutSeconds(10)
             .build();
     c.createSubscription(subscription);
     return subscriptionName;
+  }
+
+  public static String randSubscription(HStreamClient c, String streamName) {
+    return randSubscriptionWithOffset(c, streamName, SpecialOffset.LATEST);
+  }
+
+  public static String randSubscriptionFromEarliest(HStreamClient c, String streamName) {
+    return randSubscriptionWithOffset(c, streamName, SpecialOffset.EARLIEST);
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -116,5 +127,43 @@ public class TestUtils {
     PrintWriter printWriter = new PrintWriter(file);
     printWriter.println(logs);
     printWriter.close();
+  }
+
+  // -----------------------------------------------------------------------------------------------
+
+  public static Comparator<ReceivedRawRecord> ReceivedRawRecordComparator() {
+    return (r1, r2) -> {
+      var o1 = r1.getRecordId();
+      var o2 = r2.getRecordId();
+      if (o1.getBatchId() == o2.getBatchId()) {
+        return o1.getBatchIndex() - o2.getBatchIndex();
+      } else {
+        return (int) (o1.getBatchId() - o2.getBatchId());
+      }
+    };
+  }
+
+  public static boolean compareRecordIdAscending(RecordId a, RecordId b) {
+    if (a.getBatchId() == b.getBatchId()) {
+      return a.getBatchIndex() < b.getBatchIndex();
+    } else {
+      return a.getBatchId() < b.getBatchId();
+    }
+  }
+
+  public static boolean isAscending(List<RecordId> input) {
+    if (input.isEmpty()) return false;
+    if (input.size() == 1) return true;
+
+    for (int i = 1; i < input.size(); i++) {
+      if (!compareRecordIdAscending(input.get(i - 1), input.get(i))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  public static void assertRecordIdsAscending(List<ReceivedRawRecord> input) {
+    Assertions.assertTrue(isAscending(input.stream().map(ReceivedRawRecord::getRecordId).toList()));
   }
 }

@@ -1,17 +1,9 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.randText;
+import static io.hstream.testing.TestUtils.*;
 
-import io.hstream.Consumer;
-import io.hstream.HRecord;
-import io.hstream.HStreamClient;
-import io.hstream.Producer;
-import io.hstream.RecordId;
-import io.hstream.Stream;
-import java.util.List;
-import java.util.Random;
+import io.hstream.*;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -78,6 +70,26 @@ class BasicTest {
     rand.nextBytes(record);
     RecordId rId = producer.write(record).join();
     Assertions.assertNotNull(rId);
+
+    CountDownLatch notify = new CountDownLatch(1);
+    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    List<byte[]> res = new ArrayList<>();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("test-consumer")
+            .rawRecordReceiver(
+                ((receivedRawRecord, responder) -> {
+                  res.add(receivedRawRecord.getRawRecord());
+                  responder.ack();
+                  notify.countDown();
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+    notify.await();
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertArrayEquals(record, res.get(0));
   }
 
   @Test
@@ -91,6 +103,26 @@ class BasicTest {
     HRecord hRec = HRecord.newBuilder().put("x", "y").put("acc", 0).put("init", false).build();
     RecordId rId = producer.write(hRec).join();
     Assertions.assertNotNull(rId);
+
+    CountDownLatch notify = new CountDownLatch(1);
+    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    List<HRecord> res = new ArrayList<>();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("test-consumer")
+            .hRecordReceiver(
+                ((receivedHRecord, responder) -> {
+                  res.add(receivedHRecord.getHRecord());
+                  responder.ack();
+                  notify.countDown();
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+    notify.await();
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertEquals(hRec.toString(), res.get(0).toString());
   }
 
   @Test
@@ -100,15 +132,37 @@ class BasicTest {
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
     Random rand = new Random();
     byte[] rRec = new byte[128];
+    var records = new ArrayList<String>();
     var xs = new CompletableFuture[100];
     for (int i = 0; i < 100; i++) {
       rand.nextBytes(rRec);
+      records.add(Arrays.toString(rRec));
       xs[i] = producer.write(rRec);
     }
     CompletableFuture.allOf(xs).join();
     for (int i = 0; i < 100; i++) {
       Assertions.assertNotNull(xs[i]);
     }
+
+    CountDownLatch notify = new CountDownLatch(xs.length);
+    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    List<String> res = new ArrayList<>();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("test-consumer")
+            .rawRecordReceiver(
+                ((rawRecord, responder) -> {
+                  res.add(Arrays.toString(rawRecord.getRawRecord()));
+                  responder.ack();
+                  notify.countDown();
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+    notify.await();
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertEquals(records, res);
   }
 
   @Test
@@ -118,15 +172,39 @@ class BasicTest {
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
     Random rand = new Random();
     var xs = new CompletableFuture[100];
+    var records = new ArrayList<HRecord>();
     for (int i = 0; i < 100; i++) {
       HRecord hRec =
           HRecord.newBuilder().put("x", rand.nextInt()).put("y", rand.nextDouble()).build();
       xs[i] = producer.write(hRec);
+      records.add(hRec);
     }
     CompletableFuture.allOf(xs).join();
     for (int i = 0; i < 100; i++) {
       Assertions.assertNotNull(xs[i]);
     }
+
+    CountDownLatch notify = new CountDownLatch(xs.length);
+    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    List<HRecord> res = new ArrayList<>();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("test-consumer")
+            .hRecordReceiver(
+                ((hRecord, responder) -> {
+                  res.add(hRecord.getHRecord());
+                  responder.ack();
+                  notify.countDown();
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+    notify.await();
+    consumer.stopAsync().awaitTerminated();
+    var input = records.parallelStream().map(HRecord::toString).toList();
+    var output = res.parallelStream().map(HRecord::toString).toList();
+    Assertions.assertEquals(input, output);
   }
 
   @Test
@@ -176,15 +254,18 @@ class BasicTest {
     final String streamName = randStream(hStreamClient);
     final String subscription = randSubscription(hStreamClient, streamName);
     Producer producer = hStreamClient.newProducer().stream(streamName).build();
+    List<String> records = new ArrayList<>();
     Random random = new Random();
     byte[] rawRecord = new byte[100];
-    final int count = 10;
+    final int count = 1000;
     for (int i = 0; i < count; ++i) {
       random.nextBytes(rawRecord);
+      records.add(Arrays.toString(rawRecord));
       producer.write(rawRecord).join();
     }
 
-    AtomicInteger readCount = new AtomicInteger();
+    CountDownLatch signal = new CountDownLatch(count);
+    List<ReceivedRawRecord> res1 = new ArrayList<>();
     Consumer consumer1 =
         hStreamClient
             .newConsumer()
@@ -192,11 +273,13 @@ class BasicTest {
             .name("consumer-1")
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  readCount.incrementAndGet();
                   responder.ack();
+                  res1.add(receivedRawRecord);
+                  signal.countDown();
                 })
             .build();
 
+    List<ReceivedRawRecord> res2 = new ArrayList<>();
     Consumer consumer2 =
         hStreamClient
             .newConsumer()
@@ -204,11 +287,13 @@ class BasicTest {
             .name("consumer-2")
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  readCount.incrementAndGet();
                   responder.ack();
+                  res2.add(receivedRawRecord);
+                  signal.countDown();
                 })
             .build();
 
+    List<ReceivedRawRecord> res3 = new ArrayList<>();
     Consumer consumer3 =
         hStreamClient
             .newConsumer()
@@ -216,8 +301,9 @@ class BasicTest {
             .name("consumer-3")
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  readCount.incrementAndGet();
                   responder.ack();
+                  res3.add(receivedRawRecord);
+                  signal.countDown();
                 })
             .build();
 
@@ -225,13 +311,21 @@ class BasicTest {
     consumer2.startAsync().awaitRunning();
     consumer3.startAsync().awaitRunning();
 
-    Thread.sleep(5000);
+    signal.await();
 
     consumer1.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     consumer3.stopAsync().awaitTerminated();
 
-    Assertions.assertEquals(count, readCount.get());
+    Assertions.assertEquals(count, res1.size() + res2.size() + res3.size());
+    java.util.stream.Stream.of(res1, res2, res3).forEach(TestUtils::assertRecordIdsAscending);
+    var res =
+        java.util.stream.Stream.of(res1, res2, res3)
+            .flatMap(Collection::stream)
+            .sorted(ReceivedRawRecordComparator())
+            .map(r -> Arrays.toString(r.getRawRecord()))
+            .toList();
+    Assertions.assertEquals(records, res);
   }
 
   @Test
@@ -241,16 +335,19 @@ class BasicTest {
     final String subscription = randSubscription(hStreamClient, streamName);
 
     Producer producer = hStreamClient.newProducer().stream(streamName).build();
+    List<String> records = new ArrayList<>();
     Random random = new Random();
+    byte[] rawRecord = new byte[100];
     for (int i = 0; i < recordCount; ++i) {
-      byte[] rawRecord = new byte[100];
       random.nextBytes(rawRecord);
       producer.write(rawRecord).join();
+      records.add(Arrays.toString(rawRecord));
     }
 
-    final int maxReceivedCountC1 = 3;
+    final int maxReceivedCountC1 = Math.max(1, random.nextInt(recordCount / 2));
     CountDownLatch latch1 = new CountDownLatch(1);
     AtomicInteger c1ReceivedRecordCount = new AtomicInteger(0);
+    var res1 = new ArrayList<ReceivedRawRecord>();
     Consumer consumer1 =
         hStreamClient
             .newConsumer()
@@ -260,6 +357,7 @@ class BasicTest {
                 (receivedRawRecord, responder) -> {
                   if (c1ReceivedRecordCount.get() < maxReceivedCountC1) {
                     responder.ack();
+                    res1.add(receivedRawRecord);
                     if (c1ReceivedRecordCount.incrementAndGet() == maxReceivedCountC1) {
                       latch1.countDown();
                     }
@@ -270,11 +368,10 @@ class BasicTest {
     latch1.await();
     consumer1.stopAsync().awaitTerminated();
 
-    Thread.sleep(3000);
-
     final int maxReceivedCountC2 = recordCount - maxReceivedCountC1;
     CountDownLatch latch2 = new CountDownLatch(1);
     AtomicInteger c2ReceivedRecordCount = new AtomicInteger(0);
+    var res2 = new ArrayList<ReceivedRawRecord>();
     Consumer consumer2 =
         hStreamClient
             .newConsumer()
@@ -284,6 +381,7 @@ class BasicTest {
                 (receivedRawRecord, responder) -> {
                   if (c2ReceivedRecordCount.get() < maxReceivedCountC2) {
                     responder.ack();
+                    res2.add(receivedRawRecord);
                     if (c2ReceivedRecordCount.incrementAndGet() == maxReceivedCountC2) {
                       latch2.countDown();
                     }
@@ -295,5 +393,12 @@ class BasicTest {
     consumer2.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(recordCount, c1ReceivedRecordCount.get() + c2ReceivedRecordCount.get());
+    var res =
+        java.util.stream.Stream.of(res1, res2)
+            .flatMap(Collection::stream)
+            .sorted(ReceivedRawRecordComparator())
+            .map(r -> Arrays.toString(r.getRawRecord()))
+            .toList();
+    Assertions.assertEquals(records, res);
   }
 }
