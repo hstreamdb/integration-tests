@@ -1,7 +1,10 @@
 package io.hstream.testing;
 
 import io.hstream.HStreamClient;
+import io.hstream.Stream;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,19 +15,19 @@ class BasicClusterTest {
 
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
-  private GenericContainer<?>[] hservers;
+  private List<GenericContainer<?>> hServers;
+  private List<String> hServerUrls;
 
   public void setHStreamDBUrl(String hStreamDBUrl) {
     this.hStreamDBUrl = hStreamDBUrl;
   }
 
-  public void setHServers(GenericContainer<?>[] hservers) {
-    this.hservers = hservers;
+  public void setHServers(List<GenericContainer<?>> hServers) {
+    this.hServers = hServers;
   }
 
-  private void terminateHServer(int serverId) {
-    hservers[serverId].close();
-    System.out.println("[DEBUG]: terminate HServer " + String.valueOf(serverId));
+  public void setHServerUrls(List<String> hServerUrls) {
+    this.hServerUrls = hServerUrls;
   }
 
   @BeforeEach
@@ -43,10 +46,12 @@ class BasicClusterTest {
   @Test
   void testConnections() throws Exception {
 
-    try (HStreamClient client1 = HStreamClient.builder().serviceUrl("127.0.0.1:6570").build();
-        HStreamClient client2 = HStreamClient.builder().serviceUrl("127.0.0.1:6571").build();
-        HStreamClient client3 = HStreamClient.builder().serviceUrl("127.0.0.1:6572").build();
-        HStreamClient client4 = HStreamClient.builder().serviceUrl("127.0.0.1:6573").build();
-        HStreamClient client5 = HStreamClient.builder().serviceUrl("127.0.0.1:6574").build(); ) {}
+    for (var hServerUrl : hServerUrls) {
+      System.out.println(hServerUrl);
+      try (HStreamClient client = HStreamClient.builder().serviceUrl(hServerUrl).build()) {
+        List<Stream> res = client.listStreams();
+        Assertions.assertTrue(res.isEmpty());
+      }
+    }
   }
 }

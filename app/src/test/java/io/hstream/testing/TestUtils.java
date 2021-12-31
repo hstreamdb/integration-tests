@@ -1,9 +1,5 @@
 package io.hstream.testing;
 
-import com.github.dockerjava.api.command.CreateContainerCmd;
-import com.github.dockerjava.api.model.ExposedPort;
-import com.github.dockerjava.api.model.PortBinding;
-import com.github.dockerjava.api.model.Ports;
 import io.hstream.HStreamClient;
 import io.hstream.Subscription;
 import io.hstream.SubscriptionOffset;
@@ -12,7 +8,6 @@ import java.nio.file.Path;
 import java.util.UUID;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
@@ -40,13 +35,14 @@ public class TestUtils {
 
   // -----------------------------------------------------------------------------------------------
 
-  public static GenericContainer<?> makeZooKeeper(Network network) {
-    return new GenericContainer(DockerImageName.parse("zookeeper")).withNetwork(network);
+  public static GenericContainer<?> makeZooKeeper() {
+    return new GenericContainer(DockerImageName.parse("zookeeper")).withNetworkMode("host");
   }
 
-  public static GenericContainer<?> makeHStore(Network network, Path dataDir) {
+  public static GenericContainer<?> makeHStore(Path dataDir) {
     return new GenericContainer(DockerImageName.parse("hstreamdb/hstream:latest"))
-        .withNetwork(network)
+        // .withNetwork(network)
+        .withNetworkMode("host")
         .withFileSystemBind(
             dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_WRITE)
         .withCommand(
@@ -56,54 +52,38 @@ public class TestUtils {
                 + "--root /data/hstore "
                 + "--use-tcp "
                 + "--tcp-host "
-                + "$(hostname -I | cut -f1 -d' ') "
+                + "127.0.0.1 "
+                // + "$(hostname -I | cut -f1 -d' ') "
                 + "--user-admin-port 6440 "
                 + "--no-interactive")
         .waitingFor(Wait.forLogMessage(".*LogDevice Cluster running.*", 1));
   }
 
   public static GenericContainer<?> makeHServer(
-      Network network, Path dataDir, String zkHost, String hstoreHost, int serverId) {
-    return makeHServerWith(
-        "0.0.0.0", 6570, 65000 + serverId, network, dataDir, zkHost, hstoreHost, serverId);
-  }
-
-  public static GenericContainer<?> makeHServerWith(
-      String addr,
+      String address,
       int port,
       int internalPort,
-      Network network,
       Path dataDir,
       String zkHost,
       String hstoreHost,
       int serverId) {
     return new GenericContainer(DockerImageName.parse("hstreamdb/hstream:v0.6.0"))
-        .withNetwork(network)
+        .withNetworkMode("host")
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
-        .withCreateContainerCmdModifier(
-            createContainerCmd -> {
-              CreateContainerCmd cmd = (CreateContainerCmd) createContainerCmd;
-              var exposedPort = new ExposedPort(port + serverId);
-              cmd.withExposedPorts(exposedPort);
-              cmd.getHostConfig()
-                  .withPortBindings(
-                      new PortBinding(Ports.Binding.bindPort(port + serverId), exposedPort));
-            })
         .withCommand(
             "bash",
             "-c",
             " hstream-server"
                 + " --host "
-                + "$(hostname -I | cut -f1 -d' ')"
+                + "127.0.0.1 "
                 + " --port "
-                + String.valueOf(port + serverId)
+                + port
                 + " --internal-port "
-                + String.valueOf(internalPort)
+                + internalPort
                 + " --address "
-                + addr
-                // + "$(hostname -I | cut -f1 -d' ')"
+                + address
                 + " --server-id "
-                + String.valueOf(serverId)
+                + serverId
                 + " --zkuri "
                 + zkHost
                 + ":2181"

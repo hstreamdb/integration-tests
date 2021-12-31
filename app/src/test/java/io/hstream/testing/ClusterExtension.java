@@ -6,53 +6,48 @@ import static io.hstream.testing.TestUtils.makeZooKeeper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
-import org.testcontainers.containers.output.OutputFrame.OutputType;
 
 public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
-  private final GenericContainer<?>[] hservers = new GenericContainer[5];
+  static final int CLUSTER_SIZE = 3;
+  private final List<GenericContainer<?>> hServers = new ArrayList<>(CLUSTER_SIZE);
+  private final List<String> hServerUrls = new ArrayList<>(CLUSTER_SIZE);
   private Path dataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
-  private Network.NetworkImpl network;
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
     dataDir = Files.createTempDirectory("hstream");
-    network = Network.builder().build();
 
-    zk = makeZooKeeper(network);
+    zk = makeZooKeeper();
     zk.start();
-    String zkHost =
-        zk.getContainerInfo()
-            .getNetworkSettings()
-            .getNetworks()
-            .get(network.getName())
-            .getIpAddress();
+    String zkHost = "127.0.0.1";
     System.out.println("[DEBUG]: zkHost: " + zkHost);
 
-    hstore = makeHStore(network, dataDir);
+    hstore = makeHStore(dataDir);
     hstore.start();
-    String hstoreHost =
-        hstore
-            .getContainerInfo()
-            .getNetworkSettings()
-            .getNetworks()
-            .get(network.getName())
-            .getIpAddress();
+    String hstoreHost = "127.0.0.1";
     System.out.println("[DEBUG]: hstoreHost: " + hstoreHost);
 
-    for (int i = 0; i < 5; i++) {
-      hservers[i] = makeHServer(network, dataDir, zkHost, hstoreHost, i);
-      hservers[i].start();
+    String hServerAddress = "127.0.0.1";
+    for (int i = 0; i < CLUSTER_SIZE; ++i) {
+      int hServerPort = 6570 + i;
+      int hServerInnerPort = 65000 + i;
+      var hServer =
+          makeHServer(
+              hServerAddress, hServerPort, hServerInnerPort, dataDir, zkHost, hstoreHost, i);
+      hServer.start();
+      hServers.add(hServer);
+      hServerUrls.add(hServerAddress + ":" + hServerPort);
 
-      String logs = hservers[i].getLogs();
-      System.out.println(logs);
+      // System.out.println(hServer.getLogs());
     }
     Thread.sleep(100);
 
@@ -60,29 +55,21 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     testInstance
         .getClass()
         .getMethod("setHStreamDBUrl", String.class)
-        .invoke(testInstance, "127.0.0.1:6570");
+        .invoke(testInstance, hServerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get());
+    testInstance.getClass().getMethod("setHServers", List.class).invoke(testInstance, hServers);
     testInstance
         .getClass()
-        .getMethod("setHServers", GenericContainer[].class)
-        .invoke(testInstance, (Object) hservers);
+        .getMethod("setHServerUrls", List.class)
+        .invoke(testInstance, hServerUrls);
   }
 
   @Override
   public void afterEach(ExtensionContext context) throws Exception {
-    for (int i = 0; i < 5; i++) {
-      System.out.println(hservers[i].getLogs(OutputType.STDOUT));
-      hservers[i].close();
+    for (var hServer : hServers) {
+      System.out.println(hServer.getLogs());
+      hServer.close();
     }
     hstore.close();
     zk.close();
-    network.close();
-
-    for (int i = 0; i < 5; i++) {
-      hservers[i] = null;
-    }
-    hstore = null;
-    zk = null;
-    network = null;
-    dataDir = null;
   }
 }
