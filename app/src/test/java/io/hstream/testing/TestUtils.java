@@ -4,8 +4,11 @@ import io.hstream.HStreamClient;
 import io.hstream.Subscription;
 import io.hstream.SubscriptionOffset;
 import io.hstream.SubscriptionOffset.SpecialOffset;
+import java.io.File;
+import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.UUID;
+import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -94,5 +97,24 @@ public class TestUtils {
                 + " --store-admin-port "
                 + "6440")
         .waitingFor(Wait.forLogMessage(".*Server started on port.*", 1));
+  }
+
+  // -----------------------------------------------------------------------------------------------
+
+  public static String trimMethodName(String methodName) {
+    return methodName.substring(0, methodName.indexOf('('));
+  }
+
+  public static void writeLog(ExtensionContext context, String entryName, String logs)
+      throws Exception {
+    String testClassName = context.getRequiredTestClass().getSimpleName();
+    String testName = trimMethodName(context.getDisplayName());
+    String fileName = "../.logs/" + testClassName + "/" + testName + "/" + entryName;
+
+    File file = new File(fileName);
+    file.getParentFile().mkdirs();
+    PrintWriter printWriter = new PrintWriter(file);
+    printWriter.println(logs);
+    printWriter.close();
   }
 }
