@@ -33,3 +33,9 @@ jobs:
           java-version: ${{ matrix.java-version }}
       - uses: gradle/wrapper-validation-action@v1
       - run: ./gradlew build
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ success() }} || ${{ failure() }}
+        with:
+          name: logs-artifact
+          path: .logs

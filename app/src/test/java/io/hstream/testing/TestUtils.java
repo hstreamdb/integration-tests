@@ -1,13 +1,26 @@
 package io.hstream.testing;
 
-import io.hstream.*;
+import io.hstream.Consumer;
+import io.hstream.HStreamClient;
+import io.hstream.Producer;
+import io.hstream.ReceivedRawRecord;
+import io.hstream.RecordId;
+import io.hstream.Subscription;
+import io.hstream.SubscriptionOffset;
 import io.hstream.SubscriptionOffset.SpecialOffset;
+import java.io.File;
+import java.io.PrintWriter;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -124,6 +137,23 @@ public class TestUtils {
   }
 
   // -----------------------------------------------------------------------------------------------
+
+  public static String trimMethodName(String methodName) {
+    return methodName.substring(0, methodName.indexOf('('));
+  }
+
+  public static void writeLog(ExtensionContext context, String entryName, String logs)
+      throws Exception {
+    String testClassName = context.getRequiredTestClass().getSimpleName();
+    String testName = trimMethodName(context.getDisplayName());
+    String fileName = "../.logs/" + testClassName + "/" + testName + "/" + entryName;
+
+    File file = new File(fileName);
+    file.getParentFile().mkdirs();
+    PrintWriter printWriter = new PrintWriter(file);
+    printWriter.println(logs);
+    printWriter.close();
+  }
 
   public static boolean isAscending(List<RecordId> input) {
     if (input.isEmpty()) return false;

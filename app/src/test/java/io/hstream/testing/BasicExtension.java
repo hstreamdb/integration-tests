@@ -3,6 +3,7 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
+import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,8 +53,14 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void afterEach(ExtensionContext context) throws Exception {
+
+    writeLog(context, "hserver", hserver.getLogs());
     hserver.close();
+
+    writeLog(context, "hstore", hstore.getLogs());
     hstore.close();
+
+    writeLog(context, "zk", zk.getLogs());
     zk.close();
 
     hserver = null;
