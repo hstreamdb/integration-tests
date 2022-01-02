@@ -44,6 +44,10 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
         .getClass()
         .getMethod("setHStreamDBUrl", String.class)
         .invoke(testInstance, hServerAddress + ":" + hServerPort);
+    testInstance
+        .getClass()
+        .getMethod("setServer", GenericContainer.class)
+        .invoke(testInstance, hserver);
   }
 
   @Override
