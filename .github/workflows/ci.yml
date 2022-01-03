@@ -32,10 +32,12 @@ jobs:
           distribution: ${{ matrix.distribution }}
           java-version: ${{ matrix.java-version }}
       - uses: gradle/wrapper-validation-action@v1
-      - run: ./gradlew build
+      - run: ./gradlew build --scan
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}
         with:
           name: logs-artifact
-          path: .logs
+          path: |
+            .logs
+            app/build/reports

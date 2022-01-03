@@ -11,6 +11,7 @@ import static io.hstream.testing.TestUtils.randSubscriptionFromEarliest;
 import static io.hstream.testing.TestUtils.randSubscriptionWithOffset;
 import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
 
+import io.grpc.StatusException;
 import io.hstream.Consumer;
 import io.hstream.HStreamClient;
 import io.hstream.Producer;
@@ -803,5 +804,69 @@ class BasicConsumerTest {
     Assertions.assertEquals(
         records.stream().sorted().collect(Collectors.toList()),
         res1.stream().sorted().collect(Collectors.toList()));
+  }
+
+  @Test
+  @Disabled
+  void testConsumerAfterDeleteStream() throws Exception {
+    Assertions.assertThrows(
+        StatusException.class,
+        () -> {
+          String stream = randStream(hStreamClient);
+          String subscription = randSubscription(hStreamClient, stream);
+
+          Random random = new Random();
+          byte[] rawRecs = new byte[128];
+          random.nextBytes(rawRecs);
+          Producer producer = hStreamClient.newProducer().stream(stream).build();
+          RecordId recordId = producer.write(rawRecs).join();
+
+          Consumer consumer =
+              hStreamClient
+                  .newConsumer()
+                  .subscription(subscription)
+                  .rawRecordReceiver(
+                      (recs, responder) -> {
+                        Assertions.assertEquals(recordId, recs.getRecordId());
+                        responder.ack();
+                      })
+                  .build();
+
+          hStreamClient.deleteStream(stream);
+          consumer.startAsync().awaitRunning(10, TimeUnit.SECONDS);
+          consumer.stopAsync().awaitTerminated(10, TimeUnit.SECONDS);
+        });
+  }
+
+  @Test
+  @Disabled
+  void testConsumerAfterDeleteSubscription() throws Exception {
+    Assertions.assertThrows(
+        StatusException.class,
+        () -> {
+          String stream = randStream(hStreamClient);
+          String subscription = randSubscription(hStreamClient, stream);
+
+          Random random = new Random();
+          byte[] rawRecs = new byte[128];
+          random.nextBytes(rawRecs);
+          Producer producer = hStreamClient.newProducer().stream(stream).build();
+          RecordId recordId = producer.write(rawRecs).join();
+
+          Consumer consumer =
+              hStreamClient
+                  .newConsumer()
+                  .subscription(subscription)
+                  .rawRecordReceiver(
+                      (recs, responder) -> {
+                        Assertions.assertEquals(recordId, recs.getRecordId());
+                        responder.ack();
+                      })
+                  .build();
+
+          hStreamClient.deleteSubscription(subscription);
+          consumer.startAsync().awaitRunning(10, TimeUnit.SECONDS);
+          consumer.stopAsync().awaitTerminated(10, TimeUnit.SECONDS);
+        });
   }
 }
