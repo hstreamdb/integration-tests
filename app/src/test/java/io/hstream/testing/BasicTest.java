@@ -106,8 +106,11 @@ class BasicTest {
       streamNames.add(randStream(hStreamClient));
     }
     var res =
-        hStreamClient.listStreams().parallelStream().map(Stream::getStreamName).sorted().toList();
-    Assertions.assertEquals(streamNames.stream().sorted().toList(), res);
+        hStreamClient.listStreams().parallelStream()
+            .map(Stream::getStreamName)
+            .sorted()
+            .collect(Collectors.toList());
+    Assertions.assertEquals(streamNames.stream().sorted().collect(Collectors.toList()), res);
   }
 
   @Test
@@ -121,8 +124,8 @@ class BasicTest {
         hStreamClient.listSubscriptions().parallelStream()
             .map(Subscription::getSubscriptionId)
             .sorted()
-            .toList();
-    Assertions.assertEquals(subscriptions.stream().sorted().toList(), res);
+            .collect(Collectors.toList());
+    Assertions.assertEquals(subscriptions.stream().sorted().collect(Collectors.toList()), res);
   }
 
   @Test
@@ -326,8 +329,9 @@ class BasicTest {
     var done = notify.await(10, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    var hRecordInput = hRecords.parallelStream().map(HRecord::toString).toList();
-    var hOutputRecord = hres.parallelStream().map(HRecord::toString).toList();
+    var hRecordInput =
+        hRecords.parallelStream().map(HRecord::toString).collect(Collectors.toList());
+    var hOutputRecord = hres.parallelStream().map(HRecord::toString).collect(Collectors.toList());
     Assertions.assertEquals(hRecordInput, hOutputRecord);
     Assertions.assertEquals(rawRecords, rawRes);
   }
@@ -407,45 +411,45 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  //    @Test
-  //    void testWriteRawRecordWithLoop() throws Exception {
-  //        final String streamName = randStream(hStreamClient);
-  //        Producer producer =
-  //                hStreamClient.newProducer().stream(streamName).build();
-  //        Random rand = new Random();
-  //        byte[] rRec = new byte[128];
-  //        var records = new ArrayList<String>();
-  //        var xs = new CompletableFuture[100];
-  //        for (int i = 0; i < 100; i++) {
-  //            rand.nextBytes(rRec);
-  //            records.add(Arrays.toString(rRec));
-  //            xs[i] = producer.write(rRec);
-  //        }
-  //        CompletableFuture.allOf(xs).join();
-  //        for (int i = 0; i < 100; i++) {
-  //            Assertions.assertNotNull(xs[i]);
-  //        }
-  //
-  ////        CountDownLatch notify = new CountDownLatch(xs.length);
-  ////        final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-  ////        List<String> res = new ArrayList<>();
-  ////        Consumer consumer =
-  ////                hStreamClient
-  ////                        .newConsumer()
-  ////                        .subscription(subscription)
-  ////                        .name("test-consumer")
-  ////                        .rawRecordReceiver(
-  ////                                ((rawRecord, responder) -> {
-  ////                                    res.add(Arrays.toString(rawRecord.getRawRecord()));
-  ////                                    responder.ack();
-  ////                                    notify.countDown();
-  ////                                }))
-  ////                        .build();
-  ////        consumer.startAsync().awaitRunning();
-  ////        notify.await(10, TimeUnit.SECONDS);
-  ////        consumer.stopAsync().awaitTerminated();
-  ////        Assertions.assertEquals(records, res);
-  //    }
+  @Disabled
+  @Test
+  void testWriteRawRecordWithLoop() throws Exception {
+    final String streamName = randStream(hStreamClient);
+    Producer producer = hStreamClient.newProducer().stream(streamName).build();
+    Random rand = new Random();
+    byte[] rRec = new byte[128];
+    var records = new ArrayList<String>();
+    var xs = new CompletableFuture[100];
+    for (int i = 0; i < 100; i++) {
+      rand.nextBytes(rRec);
+      records.add(Arrays.toString(rRec));
+      xs[i] = producer.write(rRec);
+    }
+    CompletableFuture.allOf(xs).join();
+    for (int i = 0; i < 100; i++) {
+      Assertions.assertNotNull(xs[i]);
+    }
+
+    CountDownLatch notify = new CountDownLatch(xs.length);
+    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    List<String> res = new ArrayList<>();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("test-consumer")
+            .rawRecordReceiver(
+                ((rawRecord, responder) -> {
+                  res.add(Arrays.toString(rawRecord.getRawRecord()));
+                  responder.ack();
+                  notify.countDown();
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+    notify.await(10, TimeUnit.SECONDS);
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertEquals(records, res);
+  }
 
   @Test
   void testWriteJSONBatch() throws Exception {
@@ -485,8 +489,8 @@ class BasicTest {
     var done = notify.await(10, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    var input = records.parallelStream().map(HRecord::toString).toList();
-    var output = res.parallelStream().map(HRecord::toString).toList();
+    var input = records.parallelStream().map(HRecord::toString).collect(Collectors.toList());
+    var output = res.parallelStream().map(HRecord::toString).collect(Collectors.toList());
     Assertions.assertEquals(input, output);
   }
 
@@ -546,7 +550,6 @@ class BasicTest {
     for (int i = 0; i < 10; i++) {
       int next = rand.nextInt(10);
       if (next % 2 == 0) {
-        int sz = Math.max(1, next);
         cnt++;
         System.out.printf("[turn]: %d, batch write!!!!!\n", i);
         for (int j = 0; j < 5; j++) {
@@ -598,19 +601,11 @@ class BasicTest {
     Random rand = new Random();
     byte[] rRec = new byte[128];
     var records = new ArrayList<String>();
-    var xs = new CompletableFuture[100];
     for (int i = 0; i < 2000; i++) {
       rand.nextBytes(rRec);
       records.add(Arrays.toString(rRec));
-      //            xs[i] = producer.write(rRec);
       producer.write(rRec).join();
     }
-    System.out.println("here");
-    //        CompletableFuture.allOf(xs).join();
-    System.out.println("there");
-    //        for (int i = 0; i < 100; i++) {
-    //            Assertions.assertNotNull(xs[i]);
-    //        }
 
     CountDownLatch notify = new CountDownLatch(1);
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
@@ -638,19 +633,16 @@ class BasicTest {
                 ((receivedRawRecord, responder) -> {
                   res2.add(Arrays.toString(receivedRawRecord.getRawRecord()));
                   responder.ack();
-                  //                                    notify2.countDown();
                 }))
             .build();
     consumer.startAsync().awaitRunning();
     consumer2.startAsync().awaitRunning();
-    //        notify.await(10, TimeUnit.SECONDS);
-    //        notify2.await(10, TimeUnit.SECONDS);
+
     Thread.sleep(20000);
     consumer.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     System.out.println(res.size());
     System.out.println(res2.size());
-    //        Assertions.assertEquals(records, res);
   }
 
   @Test
@@ -707,7 +699,9 @@ class BasicTest {
     System.out.println(cnt.get());
     Assertions.assertTrue(Collections.disjoint(res, reTrans));
     res.addAll(reTrans);
-    Assertions.assertEquals(rids.stream().sorted().toList(), res.stream().sorted().toList());
+    Assertions.assertEquals(
+        rids.stream().sorted().collect(Collectors.toList()),
+        res.stream().sorted().collect(Collectors.toList()));
   }
 
   @Test
@@ -814,11 +808,12 @@ class BasicTest {
     System.out.println(rids.get(randomIndex));
     System.out.println(rids);
     System.out.println(rec);
-    Assertions.assertEquals(records.stream().skip(randomIndex).toList().size(), res.size());
-    Assertions.assertEquals(records.stream().skip(randomIndex).toList(), res);
+    Assertions.assertEquals((int) records.stream().skip(randomIndex).count(), res.size());
+    Assertions.assertEquals(records.stream().skip(randomIndex).collect(Collectors.toList()), res);
   }
 
   @Test
+  @Disabled
   void testSubscribeBeforeOrAfterProducedOffset() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer =
@@ -977,7 +972,9 @@ class BasicTest {
         "records.size = %d, res.size = %d\n", records.size(), res1.size() + res2.size());
     Assertions.assertEquals(records.size(), res1.size() + res2.size());
     res1.addAll(res2);
-    Assertions.assertEquals(records.stream().sorted().toList(), res1.stream().sorted().toList());
+    Assertions.assertEquals(
+        records.stream().sorted().collect(Collectors.toList()),
+        res1.stream().sorted().collect(Collectors.toList()));
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -1015,7 +1012,7 @@ class BasicTest {
             .flatMap(Collection::stream)
             .sorted(Comparator.comparing(ReceivedRawRecord::getRecordId))
             .map(r -> Arrays.toString(r.getRawRecord()))
-            .toList();
+            .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
   }
 
@@ -1080,7 +1077,7 @@ class BasicTest {
             .flatMap(Collection::stream)
             .sorted(Comparator.comparing(ReceivedRawRecord::getRecordId))
             .map(r -> Arrays.toString(r.getRawRecord()))
-            .toList();
+            .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
   }
 
@@ -1119,7 +1116,7 @@ class BasicTest {
             .flatMap(Collection::stream)
             .sorted(Comparator.comparing(ReceivedRawRecord::getRecordId))
             .map(r -> Arrays.toString(r.getRawRecord()))
-            .toList();
+            .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
   }
 
@@ -1162,7 +1159,7 @@ class BasicTest {
             .flatMap(Collection::stream)
             .sorted(Comparator.comparing(ReceivedRawRecord::getRecordId))
             .map(r -> Arrays.toString(r.getRawRecord()))
-            .toList();
+            .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
   }
 
@@ -1252,7 +1249,7 @@ class BasicTest {
             .map(ReceivedRawRecord::getRecordId)
             .sorted()
             .distinct()
-            .toList();
+            .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
   }
 }

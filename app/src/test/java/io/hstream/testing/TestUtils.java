@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.BindMode;
@@ -168,7 +169,9 @@ public class TestUtils {
   }
 
   public static void assertRecordIdsAscending(List<ReceivedRawRecord> input) {
-    Assertions.assertTrue(isAscending(input.stream().map(ReceivedRawRecord::getRecordId).toList()));
+    Assertions.assertTrue(
+        isAscending(
+            input.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList())));
   }
 
   public static Consumer createConsumer(
