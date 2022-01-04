@@ -23,6 +23,9 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
     redirectStdOutAndErr(context);
+    System.out.printf(
+        "[DEBUG]: begin %s %s\n",
+        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
 
     dataDir = Files.createTempDirectory("hstream");
 
@@ -70,5 +73,8 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     hstore = null;
     zk = null;
     dataDir = null;
+    System.out.printf(
+        "[DEBUG]: end %s %s\n",
+        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
   }
 }

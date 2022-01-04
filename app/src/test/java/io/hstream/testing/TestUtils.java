@@ -168,7 +168,7 @@ public class TestUtils {
 
     String testClassName = context.getRequiredTestClass().getSimpleName();
     String testName = trimMethodName(context.getDisplayName());
-    String fileName = "../.logs/" + testClassName + "/" + testName + "/hstreamdb-java";
+    String fileName = "../.logs/" + testClassName + "/" + testName + "/stdout";
     File file = new File(fileName);
     file.getParentFile().mkdirs();
 

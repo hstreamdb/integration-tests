@@ -27,6 +27,9 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
     redirectStdOutAndErr(context);
+    System.out.printf(
+        "[DEBUG]: begin %s %s\n",
+        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
 
     dataDir = Files.createTempDirectory("hstream");
 
@@ -80,5 +83,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     hstore.close();
     writeLog(context, "zk", zk.getLogs());
     zk.close();
+    System.out.printf(
+        "[DEBUG]: end %s %s\n",
+        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
   }
 }
