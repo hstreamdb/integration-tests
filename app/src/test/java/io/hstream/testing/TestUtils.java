@@ -161,7 +161,7 @@ public class TestUtils {
     printWriter.close();
   }
 
-  public static void redirectStdErr(ExtensionContext context) throws Exception {
+  public static void redirectStdOutAndErr(ExtensionContext context) throws Exception {
 
     OutputStream out = System.out;
     OutputStream err = System.err;

@@ -974,8 +974,6 @@ class BasicTest {
     }
     consumer.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
-    var log = server.getLogs();
-    System.out.println(log);
     Assertions.assertTrue(done);
     System.out.printf("===========resend: %d\n", i.get());
     System.out.printf(
@@ -1244,7 +1242,6 @@ class BasicTest {
     }
 
     boolean done = signal.await(30, TimeUnit.SECONDS);
-    System.out.println(server.getLogs());
     System.out.println(signal.getCount());
     Assertions.assertTrue(
         done,
