@@ -7,6 +7,7 @@ import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -21,9 +22,13 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
+    System.out.println(
+        "================================================================================");
     System.out.printf(
         "[DEBUG]: begin %s %s\n",
         context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
+    System.out.println(
+        "================================================================================");
 
     dataDir = Files.createTempDirectory("hstream");
 
@@ -57,22 +62,27 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void afterEach(ExtensionContext context) throws Exception {
+    String grp = UUID.randomUUID().toString();
 
-    writeLog(context, "hserver", hserver.getLogs());
+    writeLog(context, "hserver", grp, hserver.getLogs());
     hserver.close();
 
-    writeLog(context, "hstore", hstore.getLogs());
+    writeLog(context, "hstore", grp, hstore.getLogs());
     hstore.close();
 
-    writeLog(context, "zk", zk.getLogs());
+    writeLog(context, "zk", grp, zk.getLogs());
     zk.close();
 
     hserver = null;
     hstore = null;
     zk = null;
     dataDir = null;
+    System.out.println(
+        "================================================================================");
     System.out.printf(
         "[DEBUG]: end %s %s\n",
         context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
+    System.out.println(
+        "================================================================================");
   }
 }

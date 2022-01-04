@@ -40,6 +40,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
@@ -901,6 +902,7 @@ class BasicTest {
     Assertions.assertEquals(expectation, res2);
   }
 
+  @RepeatedTest(10)
   @Test
   void testRedundancyAndUnorderedAck() throws Exception {
     final String streamName = randStream(hStreamClient);

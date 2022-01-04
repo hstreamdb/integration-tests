@@ -140,15 +140,12 @@ public class TestUtils {
 
   // -----------------------------------------------------------------------------------------------
 
-  public static String trimMethodName(String methodName) {
-    return methodName.substring(0, methodName.indexOf('('));
-  }
-
-  public static void writeLog(ExtensionContext context, String entryName, String logs)
+  public static void writeLog(ExtensionContext context, String entryName, String grp, String logs)
       throws Exception {
     String testClassName = context.getRequiredTestClass().getSimpleName();
-    String testName = trimMethodName(context.getDisplayName());
-    String fileName = "../.logs/" + testClassName + "/" + testName + "/" + entryName;
+    String testName = context.getTestMethod().get().getName();
+    String fileName = "../.logs/" + testClassName + "/" + testName + "/" + grp + "/" + entryName;
+    System.out.println("[DEBUG]: log to " + fileName);
 
     File file = new File(fileName);
     file.getParentFile().mkdirs();
