@@ -3,7 +3,6 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
-import static io.hstream.testing.TestUtils.redirectStdOutAndErr;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
@@ -22,7 +21,6 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
-    redirectStdOutAndErr(context);
     System.out.printf(
         "[DEBUG]: begin %s %s\n",
         context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());

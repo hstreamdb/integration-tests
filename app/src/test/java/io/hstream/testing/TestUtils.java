@@ -9,9 +9,6 @@ import io.hstream.Subscription;
 import io.hstream.SubscriptionOffset;
 import io.hstream.SubscriptionOffset.SpecialOffset;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -28,7 +25,6 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.shaded.org.bouncycastle.util.io.TeeOutputStream;
 import org.testcontainers.utility.DockerImageName;
 
 public class TestUtils {
@@ -159,27 +155,6 @@ public class TestUtils {
     PrintWriter printWriter = new PrintWriter(file);
     printWriter.println(logs);
     printWriter.close();
-  }
-
-  public static void redirectStdOutAndErr(ExtensionContext context) throws Exception {
-
-    OutputStream out = System.out;
-    OutputStream err = System.err;
-
-    String testClassName = context.getRequiredTestClass().getSimpleName();
-    String testName = trimMethodName(context.getDisplayName());
-    String fileName = "../.logs/" + testClassName + "/" + testName + "/stdout";
-    File file = new File(fileName);
-    file.getParentFile().mkdirs();
-
-    FileOutputStream fileOutputStream = new FileOutputStream(file);
-    PrintStream printStream = new PrintStream(fileOutputStream);
-
-    OutputStream outWith = new TeeOutputStream(out, printStream);
-    OutputStream errWith = new TeeOutputStream(err, printStream);
-
-    System.setOut(new PrintStream(outWith));
-    System.setErr(new PrintStream(errWith));
   }
 
   // -----------------------------------------------------------------------------------------------
