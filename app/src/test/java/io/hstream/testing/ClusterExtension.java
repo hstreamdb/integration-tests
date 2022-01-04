@@ -71,10 +71,10 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
       writeLog(context, "hserver-" + i, hServer.getLogs());
       hServer.close();
     }
-    
+
     hServers.clear();
     hServerUrls.clear();
-    
+
     writeLog(context, "hstore", hstore.getLogs());
     hstore.close();
     writeLog(context, "zk", zk.getLogs());
