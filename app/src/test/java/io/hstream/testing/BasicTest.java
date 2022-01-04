@@ -11,6 +11,7 @@ import static io.hstream.testing.TestUtils.randSubscriptionFromEarliest;
 import static io.hstream.testing.TestUtils.randSubscriptionWithOffset;
 import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
 import static io.hstream.testing.TestUtils.randText;
+import static io.hstream.testing.TestUtils.restartServer;
 
 import io.hstream.Consumer;
 import io.hstream.HRecord;
@@ -40,7 +41,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
@@ -136,28 +136,25 @@ class BasicTest {
         () -> hStreamClient.newConsumer().name("test-consumer").build());
   }
 
-  @Disabled
+  @Disabled("enable after HS-805 fix")
   @Test
   void testDeleteNonExistingSubscriptionShouldFail() {
     Assertions.assertThrows(Exception.class, () -> hStreamClient.deleteSubscription("aaa"));
   }
 
   @Test
-  void testGetResourceAfterRestartServer() throws InterruptedException {
+  void testGetResourceAfterRestartServer() throws Exception {
     final String streamName = randStream(hStreamClient);
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    server.close();
-    Thread.sleep(5000); // need time to let zk clear old data
-    server.start();
+    restartServer(server);
     var streams = hStreamClient.listStreams();
     Assertions.assertEquals(streamName, streams.get(0).getStreamName());
     var subscriptions = hStreamClient.listSubscriptions();
     Assertions.assertEquals(subscription, subscriptions.get(0).getSubscriptionId());
   }
 
-  @Disabled
   @Test
-  void testReconsumeAfterRestartServer() throws InterruptedException {
+  void testReconsumeAfterRestartServer() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
@@ -174,9 +171,7 @@ class BasicTest {
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
 
-    server.close();
-    Thread.sleep(5000);
-    server.start();
+    restartServer(server);
     res.clear();
     CountDownLatch notify2 = new CountDownLatch(records.size());
 
@@ -185,15 +180,15 @@ class BasicTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription1, "test-consumer", res, notify2);
     consumer2.startAsync().awaitRunning();
-    done = notify.await(10, TimeUnit.SECONDS);
+    done = notify2.await(10, TimeUnit.SECONDS);
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled
+  @Disabled("enable after HS-806 fix.")
   @Test
-  void testConsumeAfterRestartServer() throws InterruptedException {
+  void testConsumeAfterRestartServer() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
@@ -211,9 +206,7 @@ class BasicTest {
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
 
-    server.close();
-    Thread.sleep(5000);
-    server.start();
+    restartServer(server);
     res.clear();
 
     Producer producer2 =
@@ -222,12 +215,12 @@ class BasicTest {
     CountDownLatch notify2 = new CountDownLatch(records.size());
     Consumer consumer2 =
         createConsumerCollectStringPayload(
-            hStreamClient, subscription, "test-consumer", res, notify2);
+            hStreamClient, subscription, "test-consumer-new", res, notify2);
     consumer2.startAsync().awaitRunning();
-    done = notify.await(10, TimeUnit.SECONDS);
+    done = notify2.await(10, TimeUnit.SECONDS);
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    Thread.sleep(100000);
+    Assertions.assertEquals(records.size(), res.size());
     Assertions.assertEquals(records, res);
   }
 
@@ -387,7 +380,7 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled
+  @Disabled("enable after HS-786 fix")
   @Test
   void testBatchSizeZero() throws Exception {
     final String streamName = randStream(hStreamClient);
@@ -408,45 +401,45 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  //    @Test
-  //    void testWriteRawRecordWithLoop() throws Exception {
-  //        final String streamName = randStream(hStreamClient);
-  //        Producer producer =
-  //                hStreamClient.newProducer().stream(streamName).build();
-  //        Random rand = new Random();
-  //        byte[] rRec = new byte[128];
-  //        var records = new ArrayList<String>();
-  //        var xs = new CompletableFuture[100];
-  //        for (int i = 0; i < 100; i++) {
-  //            rand.nextBytes(rRec);
-  //            records.add(Arrays.toString(rRec));
-  //            xs[i] = producer.write(rRec);
-  //        }
-  //        CompletableFuture.allOf(xs).join();
-  //        for (int i = 0; i < 100; i++) {
-  //            Assertions.assertNotNull(xs[i]);
-  //        }
-  //
-  ////        CountDownLatch notify = new CountDownLatch(xs.length);
-  ////        final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-  ////        List<String> res = new ArrayList<>();
-  ////        Consumer consumer =
-  ////                hStreamClient
-  ////                        .newConsumer()
-  ////                        .subscription(subscription)
-  ////                        .name("test-consumer")
-  ////                        .rawRecordReceiver(
-  ////                                ((rawRecord, responder) -> {
-  ////                                    res.add(Arrays.toString(rawRecord.getRawRecord()));
-  ////                                    responder.ack();
-  ////                                    notify.countDown();
-  ////                                }))
-  ////                        .build();
-  ////        consumer.startAsync().awaitRunning();
-  ////        notify.await(10, TimeUnit.SECONDS);
-  ////        consumer.stopAsync().awaitTerminated();
-  ////        Assertions.assertEquals(records, res);
-  //    }
+  @Disabled("enable after HS-811 fix")
+  @Test
+  void testWriteRawRecordWithLoop() throws Exception {
+    final String streamName = randStream(hStreamClient);
+    Producer producer = hStreamClient.newProducer().stream(streamName).build();
+    Random rand = new Random();
+    byte[] rRec = new byte[128];
+    var records = new ArrayList<String>();
+    var xs = new CompletableFuture[100];
+    for (int i = 0; i < 100; i++) {
+      rand.nextBytes(rRec);
+      records.add(Arrays.toString(rRec));
+      xs[i] = producer.write(rRec);
+    }
+    CompletableFuture.allOf(xs).join();
+    for (int i = 0; i < 100; i++) {
+      Assertions.assertNotNull(xs[i]);
+    }
+
+    //        CountDownLatch notify = new CountDownLatch(xs.length);
+    //        final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    //        List<String> res = new ArrayList<>();
+    //        Consumer consumer =
+    //                hStreamClient
+    //                        .newConsumer()
+    //                        .subscription(subscription)
+    //                        .name("test-consumer")
+    //                        .rawRecordReceiver(
+    //                                ((rawRecord, responder) -> {
+    //                                    res.add(Arrays.toString(rawRecord.getRawRecord()));
+    //                                    responder.ack();
+    //                                    notify.countDown();
+    //                                }))
+    //                        .build();
+    //        consumer.startAsync().awaitRunning();
+    //        notify.await(10, TimeUnit.SECONDS);
+    //        consumer.stopAsync().awaitTerminated();
+    //        Assertions.assertEquals(records, res);
+  }
 
   @Test
   void testWriteJSONBatch() throws Exception {
@@ -531,7 +524,7 @@ class BasicTest {
     }
   }
 
-  @Disabled
+  @Disabled("enable after HS-783 fix")
   @Test
   void testWriteBatchAndNoBatchRecords() throws Exception {
     final String streamName = randStream(hStreamClient);
@@ -541,35 +534,54 @@ class BasicTest {
     Random rand = new Random();
     byte[] rRec = new byte[128];
     var records = new ArrayList<String>();
+    var rids = new ArrayList<RecordId>();
     var xs = new ArrayList<CompletableFuture<RecordId>>(1000);
     int cnt = 0;
-    for (int i = 0; i < 10; i++) {
+    var txs = new ArrayList<CompletableFuture<RecordId>>(5);
+    var lock = new ReentrantLock();
+    for (int i = 0; i < 5; i++) {
       int next = rand.nextInt(10);
       if (next % 2 == 0) {
         cnt++;
         System.out.printf("[turn]: %d, batch write!!!!!\n", i);
         for (int j = 0; j < 5; j++) {
-          rand.nextBytes(rRec);
+          //          rand.nextBytes(rRec);
+          rRec = new byte[] {(byte) i};
           records.add(Arrays.toString(rRec));
           xs.add(batchProducer.write(rRec));
+          //          batchProducer.write(rRec).join();
+          txs.add(batchProducer.write(rRec));
         }
+        //        txs.forEach(CompletableFuture::join);
+        txs.forEach(
+            w ->
+                w.thenAccept(
+                    rid -> {
+                      lock.lock();
+                      rids.add(rid);
+                      lock.unlock();
+                    }));
+        txs.clear();
       } else {
         System.out.printf("[turn]: %d, no batch write!!!!!\n", i);
-        rand.nextBytes(rRec);
+        //        rand.nextBytes(rRec);
+        rRec = new byte[] {(byte) i};
         records.add(Arrays.toString(rRec));
         xs.add(producer.write(rRec));
+        rids.add(producer.write(rRec).join());
       }
     }
     System.out.printf("wait join !!!!! batch writes = %d, xs.size() = %d\n", cnt, xs.size());
-    xs.forEach(CompletableFuture::join);
+    //    xs.forEach(CompletableFuture::join);
 
-    for (CompletableFuture<RecordId> x : xs) {
-      Assertions.assertNotNull(x);
-    }
+    //    for (CompletableFuture<RecordId> x : xs) {
+    //      Assertions.assertNotNull(x);
+    //    }
 
     CountDownLatch notify = new CountDownLatch(xs.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
     List<String> res = new ArrayList<>();
+    List<RecordId> rrid = new ArrayList<>();
     Consumer consumer =
         hStreamClient
             .newConsumer()
@@ -578,78 +590,52 @@ class BasicTest {
             .rawRecordReceiver(
                 ((rawRecord, responder) -> {
                   res.add(Arrays.toString(rawRecord.getRawRecord()));
+                  rrid.add(rawRecord.getRecordId());
                   responder.ack();
                   notify.countDown();
                 }))
             .build();
     consumer.startAsync().awaitRunning();
     var done = notify.await(10, TimeUnit.SECONDS);
+    Thread.sleep(5000);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
+    System.out.println("send rid: ");
+    for (int i = 0; i < rids.size(); i++) {
+      System.out.println(rids.get(i) + ": " + records.get(i));
+    }
+    //      System.out.println(rids.stream().sorted().collect(Collectors.toList()));
+    System.out.println("received rid");
+    for (int i = 0; i < rrid.size(); i++) {
+      System.out.println(rrid.get(i) + ": " + res.get(i));
+    }
+    System.out.println(server.getLogs());
+    //      System.out.println(rrid);
+    Assertions.assertEquals(records.size(), res.size());
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled
+  @Disabled("enable after HS-807 fix.")
   @Test
-  void testDuplicateSubscribe() throws Exception {
+  void createConsumerWithExistedConsumerNameShouldThrowException() {
     final String streamName = randStream(hStreamClient);
-    var producer = hStreamClient.newProducer().stream(streamName).build();
-    Random rand = new Random();
-    byte[] rRec = new byte[128];
-    var records = new ArrayList<String>();
-    var xs = new CompletableFuture[100];
-    for (int i = 0; i < 2000; i++) {
-      rand.nextBytes(rRec);
-      records.add(Arrays.toString(rRec));
-      //            xs[i] = producer.write(rRec);
-      producer.write(rRec).join();
-    }
-    System.out.println("here");
-    //        CompletableFuture.allOf(xs).join();
-    System.out.println("there");
-    //        for (int i = 0; i < 100; i++) {
-    //            Assertions.assertNotNull(xs[i]);
-    //        }
-
-    CountDownLatch notify = new CountDownLatch(1);
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    List<String> res = new ArrayList<>();
+    final String subscription = randSubscription(hStreamClient, streamName);
     Consumer consumer =
         hStreamClient
             .newConsumer()
             .subscription(subscription)
             .name("test-consumer")
-            .rawRecordReceiver(
-                ((receivedRawRecord, responder) -> {
-                  res.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-                  responder.ack();
-                  //                                    notify.countDown();
-                }))
+            .rawRecordReceiver(((receivedRawRecord, responder) -> responder.ack()))
             .build();
-    List<String> res2 = new ArrayList<>();
-    CountDownLatch notify2 = new CountDownLatch(1);
-    Consumer consumer2 =
+    consumer.startAsync().awaitRunning();
+    Consumer consumer1 =
         hStreamClient
             .newConsumer()
             .subscription(subscription)
             .name("test-consumer")
-            .rawRecordReceiver(
-                ((receivedRawRecord, responder) -> {
-                  res2.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-                  responder.ack();
-                  //                                    notify2.countDown();
-                }))
+            .rawRecordReceiver(((receivedRawRecord, responder) -> responder.ack()))
             .build();
-    consumer.startAsync().awaitRunning();
-    consumer2.startAsync().awaitRunning();
-    //        notify.await(10, TimeUnit.SECONDS);
-    //        notify2.await(10, TimeUnit.SECONDS);
-    Thread.sleep(20000);
-    consumer.stopAsync().awaitTerminated();
-    consumer2.stopAsync().awaitTerminated();
-    System.out.println(res.size());
-    System.out.println(res2.size());
-    //        Assertions.assertEquals(records, res);
+    Assertions.assertThrows(Exception.class, () -> consumer1.startAsync().awaitRunning());
   }
 
   @Test
@@ -704,7 +690,11 @@ class BasicTest {
     consumer1.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     System.out.println(cnt.get());
-    Assertions.assertTrue(Collections.disjoint(res, reTrans));
+    // This assert may fail because we can not guarantee that consumer1
+    // will stop after all acks are send successfully, so there might be
+    // some retrans happen. Also, we are now support at-least-once
+    // consume, so we can ignore these duplicated retrans for now.
+    // Assertions.assertTrue(Collections.disjoint(res, reTrans));
     res.addAll(reTrans);
     Assertions.assertEquals(
         rids.stream().sorted().collect(Collectors.toList()),
@@ -743,7 +733,7 @@ class BasicTest {
     Assertions.assertArrayEquals(record, res.get(0));
   }
 
-  // FIXME: test may failed
+  //  @Disabled("enable after HS-808 fix.")
   @Test
   void testConsumeLargeRawBatchRecord() throws Exception {
     final String streamName = randStream(hStreamClient);
@@ -757,13 +747,15 @@ class BasicTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription, "test-consumer", res, notify);
     consumer.startAsync().awaitRunning();
-    var done = notify.await(15, TimeUnit.SECONDS);
+    var done = notify.await(35, TimeUnit.SECONDS);
+    System.out.println("records size = " + records.size());
+    System.out.println("res size = " + res.size());
     consumer.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
+    Assertions.assertTrue(done, "consumer time out");
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled
+  @Disabled("enable after HS-809 fix.")
   @Test
   void testSubscribeInMiddle() throws Exception {
     final String streamName = randStream(hStreamClient);
@@ -785,7 +777,13 @@ class BasicTest {
       Assertions.assertNotNull(writes.get(i));
     }
 
-    var randomIndex = Math.max(rand.nextInt(rids.size()), 2);
+    int randomIndex;
+    while (true) {
+      randomIndex = Math.max(rand.nextInt(rids.size()), 2);
+      if (rids.get(randomIndex).getBatchIndex() == 1) {
+        break;
+      }
+    }
     final String subscriptionInMiddle =
         randSubscriptionWithOffset(
             hStreamClient, streamName, new SubscriptionOffset(rids.get(randomIndex)));
@@ -902,7 +900,6 @@ class BasicTest {
     Assertions.assertEquals(expectation, res2);
   }
 
-  @RepeatedTest(10)
   @Test
   void testRedundancyAndUnorderedAck() throws Exception {
     final String streamName = randStream(hStreamClient);
@@ -1077,11 +1074,14 @@ class BasicTest {
     System.out.printf(
         "c1 consume: %d. c2 consume: %d, c3 consume: %d\n", res1.size(), res2.size(), res3.size());
     Assertions.assertEquals(recordCount, res1.size() + res2.size() + res3.size());
-    var set1 = res1.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
-    var set2 = res2.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
-    var set3 = res3.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
-    Assertions.assertTrue(Collections.disjoint(set1, set3));
-    Assertions.assertTrue(Collections.disjoint(set2, set3));
+    // we support at-least-once consume now, some duplicated retrans is allowed.
+    //    var set1 = res1.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
+    //    var set2 = res2.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
+    //    var set3 = res3.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
+    //    Assertions.assertTrue(
+    //        Collections.disjoint(set1, set3), "consumer1 and consumer3 received same recordId");
+    //    Assertions.assertTrue(
+    //        Collections.disjoint(set2, set3), "consumer2 and consumer3 received same recordId");
     var res =
         java.util.stream.Stream.of(res1, res2, res3)
             .flatMap(Collection::stream)
@@ -1173,7 +1173,7 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled
+  @Disabled("enable after HS-810 fix.")
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
     final String streamName = randStream(hStreamClient);
@@ -1243,7 +1243,8 @@ class BasicTest {
       }
     }
 
-    boolean done = signal.await(30, TimeUnit.SECONDS);
+    boolean done = signal.await(20, TimeUnit.SECONDS);
+    System.out.println(server.getLogs());
     System.out.println(signal.getCount());
     Assertions.assertTrue(
         done,

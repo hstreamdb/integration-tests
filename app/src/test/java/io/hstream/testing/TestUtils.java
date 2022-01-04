@@ -8,9 +8,11 @@ import io.hstream.RecordId;
 import io.hstream.Subscription;
 import io.hstream.SubscriptionOffset;
 import io.hstream.SubscriptionOffset.SpecialOffset;
+import java.io.BufferedWriter;
 import java.io.File;
-import java.io.PrintWriter;
+import java.io.FileWriter;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.BindMode;
+import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
@@ -45,7 +48,7 @@ public class TestUtils {
     Subscription subscription =
         Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
             .offset(offset)
-            .ackTimeoutSeconds(10)
+            .ackTimeoutSeconds(5)
             .build();
     c.createSubscription(subscription);
     return subscriptionName;
@@ -106,7 +109,7 @@ public class TestUtils {
       String zkHost,
       String hstoreHost,
       int serverId) {
-    return new GenericContainer<>(DockerImageName.parse("hstreamdb/hstream:v0.6.0"))
+    return new GenericContainer<>(DockerImageName.parse("hstreamdb/hstream:latest"))
         .withNetworkMode("host")
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
         .withCommand(
@@ -128,14 +131,12 @@ public class TestUtils {
                 + ":2181"
                 + " --store-config "
                 + "/data/hstore/logdevice.conf "
-                + " --store-admin-host "
-                + hstoreHost
                 + " --store-admin-port "
                 + "6440"
                 + " --log-level "
                 + "debug"
                 + " --log-with-color")
-        .waitingFor(Wait.forLogMessage(".*Server started on port.*", 1));
+        .waitingFor(Wait.forLogMessage(".*Server is starting on port.*", 1));
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -149,9 +150,9 @@ public class TestUtils {
 
     File file = new File(fileName);
     file.getParentFile().mkdirs();
-    PrintWriter printWriter = new PrintWriter(file);
-    printWriter.println(logs);
-    printWriter.close();
+    BufferedWriter writer = new BufferedWriter(new FileWriter(fileName));
+    writer.write(logs);
+    writer.close();
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -268,5 +269,20 @@ public class TestUtils {
     }
     writes.forEach(w -> w.thenAccept(rids::add));
     return rids;
+  }
+
+  public static void restartServer(GenericContainer<?> server) throws Exception {
+    server.close();
+    Thread.sleep(5000); // need time to let zk clear old data
+    System.out.println("begin restart!");
+    try {
+      if (server.isRunning()) Thread.sleep(2000);
+      server.withStartupTimeout(Duration.ofSeconds(5)).start();
+    } catch (ContainerLaunchException e) {
+      System.out.println("start hserver failed, try another restart.");
+      server.close();
+      Thread.sleep(5000);
+      server.withStartupTimeout(Duration.ofSeconds(5)).start();
+    }
   }
 }
