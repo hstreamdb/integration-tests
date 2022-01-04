@@ -1,16 +1,9 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-
-import io.hstream.Consumer;
 import io.hstream.HStreamClient;
-import io.hstream.Producer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
@@ -35,6 +28,7 @@ public class ClusterKillNodeTest {
   public void setHServerUrls(List<String> hServerUrls) {
     this.hServerUrls = hServerUrls;
   }
+
   private void terminateHServer(int serverId) {
     hServers.get(serverId).close();
     System.out.println("[DEBUG]: terminate HServer " + String.valueOf(serverId));
@@ -75,7 +69,7 @@ public class ClusterKillNodeTest {
                 } catch (InterruptedException e) {
                   throw new RuntimeException(e);
                 }
-                if(i != luckyServer) {
+                if (i != luckyServer) {
                   terminateHServer(i);
                 }
               }
@@ -93,5 +87,4 @@ public class ClusterKillNodeTest {
       }
     }
   }
-
 }
