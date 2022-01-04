@@ -38,4 +38,6 @@ jobs:
         if: ${{ success() }} || ${{ failure() }}
         with:
           name: logs-artifact
-          path: .logs
+          path: |
+            .logs
+            app/build/reports

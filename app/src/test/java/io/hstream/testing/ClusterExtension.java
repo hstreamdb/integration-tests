@@ -3,6 +3,7 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
+import static io.hstream.testing.TestUtils.redirectStdErr;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
@@ -25,6 +26,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
+    redirectStdErr(context);
+
     dataDir = Files.createTempDirectory("hstream");
 
     zk = makeZooKeeper();

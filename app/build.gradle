@@ -10,7 +10,6 @@ repositories {
 }
 
 
-
 configurations.all {
     resolutionStrategy.cacheDynamicVersionsFor 10, 'minutes'
 }
@@ -24,6 +23,8 @@ dependencies {
 
     testImplementation 'io.hstream:hstreamdb-java:0.6.2-SNAPSHOT'
     testImplementation 'com.github.docker-java:docker-java:3.2.12'
+
+    testImplementation 'commons-io:commons-io:2.11.0'
 }
 
 tasks.named('test') {
