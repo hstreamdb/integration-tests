@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -184,14 +185,17 @@ public class TestUtils {
       String subscription,
       String name,
       List<ReceivedRawRecord> records,
-      CountDownLatch latch) {
+      CountDownLatch latch,
+      ReentrantLock lock) {
     return client
         .newConsumer()
         .subscription(subscription)
         .name(name)
         .rawRecordReceiver(
             (receivedRawRecord, responder) -> {
+              lock.lock();
               records.add(receivedRawRecord);
+              lock.unlock();
               responder.ack();
               latch.countDown();
             })
@@ -204,7 +208,8 @@ public class TestUtils {
       String subscription,
       String name,
       List<ReceivedRawRecord> records,
-      CountDownLatch latch) {
+      CountDownLatch latch,
+      ReentrantLock lock) {
     final int maxReceivedCountC1 = nums;
     AtomicInteger c1ReceivedRecordCount = new AtomicInteger(0);
     return client
@@ -214,7 +219,9 @@ public class TestUtils {
         .rawRecordReceiver(
             (receivedRawRecord, responder) -> {
               if (c1ReceivedRecordCount.get() < maxReceivedCountC1) {
+                lock.lock();
                 records.add(receivedRawRecord);
+                lock.unlock();
                 responder.ack();
                 if (c1ReceivedRecordCount.incrementAndGet() == maxReceivedCountC1) {
                   latch.countDown();
@@ -229,14 +236,17 @@ public class TestUtils {
       String subscription,
       String name,
       List<String> records,
-      CountDownLatch latch) {
+      CountDownLatch latch,
+      ReentrantLock lock) {
     return client
         .newConsumer()
         .subscription(subscription)
         .name(name)
         .rawRecordReceiver(
             (receivedRawRecord, responder) -> {
+              lock.lock();
               records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
+              lock.unlock();
               responder.ack();
               latch.countDown();
             })
