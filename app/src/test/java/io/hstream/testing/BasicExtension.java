@@ -3,6 +3,8 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
+import static io.hstream.testing.TestUtils.printBeginFlag;
+import static io.hstream.testing.TestUtils.printEndFlag;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
@@ -22,13 +24,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: begin %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+    printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
 
@@ -77,12 +73,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     hstore = null;
     zk = null;
     dataDir = null;
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: end %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+
+    printEndFlag(context);
   }
 }

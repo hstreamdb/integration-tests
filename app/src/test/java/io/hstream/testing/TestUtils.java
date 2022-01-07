@@ -34,11 +34,11 @@ import org.testcontainers.utility.DockerImageName;
 public class TestUtils {
 
   public static String randText() {
-    return "test_stream_" + UUID.randomUUID().toString().replace("-", "");
+    return UUID.randomUUID().toString().replace("-", "");
   }
 
   public static String randStream(HStreamClient c) {
-    String streamName = randText();
+    String streamName = "test_stream_" + randText();
     c.createStream(streamName, (short) 3);
     return streamName;
   }
@@ -294,5 +294,26 @@ public class TestUtils {
       Thread.sleep(5000);
       server.withStartupTimeout(Duration.ofSeconds(5)).start();
     }
+  }
+
+  private static void printFlag(String flag, ExtensionContext context) {
+    System.out.println(
+        "=====================================================================================");
+    System.out.printf(
+        "[DEBUG]: %s %s %s %s\n",
+        flag,
+        context.getRequiredTestInstance().getClass().getSimpleName(),
+        context.getTestMethod().get().getName(),
+        context.getDisplayName());
+    System.out.println(
+        "=====================================================================================");
+  }
+
+  public static void printBeginFlag(ExtensionContext context) {
+    printFlag("begin", context);
+  }
+
+  public static void printEndFlag(ExtensionContext context) {
+    printFlag("end", context);
   }
 }

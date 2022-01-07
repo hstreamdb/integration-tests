@@ -37,7 +37,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
 
@@ -777,8 +782,8 @@ class BasicTest {
     done = notify1.await(10, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    // This assert may fail because we can not guarantee that consumer1
-    // will stop after all acks are send successfully, so there might be
+    // This asserts may fail because we can not guarantee that consumer1
+    // will stop after all ACKs are sent successfully, so there might be
     // some retrans happen. Also, we are now support at-least-once
     // consume, so we can ignore these duplicated retrans for now.
     // Assertions.assertTrue(Collections.disjoint(res, reTrans));
@@ -908,8 +913,7 @@ class BasicTest {
     System.out.println(rids.get(randomIndex));
     System.out.println(rids);
     System.out.println(rec);
-    Assertions.assertEquals(
-        records.stream().skip(randomIndex).collect(Collectors.toList()).size(), res.size());
+    Assertions.assertEquals((int) records.stream().skip(randomIndex).count(), res.size());
     Assertions.assertEquals(records.stream().skip(randomIndex).collect(Collectors.toList()), res);
   }
 

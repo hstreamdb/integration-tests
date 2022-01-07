@@ -3,6 +3,8 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
+import static io.hstream.testing.TestUtils.printBeginFlag;
+import static io.hstream.testing.TestUtils.printEndFlag;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
@@ -23,16 +25,12 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
   private Path dataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
+  private String grp;
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: begin %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+    grp = UUID.randomUUID().toString();
+    printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
 
@@ -69,11 +67,15 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
         .getClass()
         .getMethod("setHServerUrls", List.class)
         .invoke(testInstance, hServerUrls);
+    testInstance.getClass().getMethod("setLogGrp", String.class).invoke(testInstance, grp);
+    testInstance
+        .getClass()
+        .getMethod("setContext", ExtensionContext.class)
+        .invoke(testInstance, context);
   }
 
   @Override
   public void afterEach(ExtensionContext context) throws Exception {
-    String grp = UUID.randomUUID().toString();
 
     for (int i = 0; i < hServers.size(); i++) {
       var hServer = hServers.get(i);
@@ -89,12 +91,6 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     writeLog(context, "zk", grp, zk.getLogs());
     zk.close();
 
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: end %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+    printEndFlag(context);
   }
 }
