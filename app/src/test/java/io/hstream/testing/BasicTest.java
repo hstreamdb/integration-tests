@@ -28,9 +28,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -197,7 +199,7 @@ class BasicTest {
   @Disabled("restart may cause test fail, disable")
   @Test
   @Timeout(60)
-  void testReconsumeAfterRestartServer() throws Exception {
+  void testReconsumeAllDataFromSameSubscriptionAfterServerRestart() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
@@ -233,40 +235,49 @@ class BasicTest {
   @Disabled("enable after HS-806 fix.")
   @Test
   @Timeout(60)
-  // FIXME
-  void testConsumeAfterRestartServer() throws Exception {
+  void testAckedRecordShouldNotReTransAfterServerRestart() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
-    var records = doProduceAndGatherRid(producer, 128, 100);
+        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(5).build();
+    var records = doProduceAndGatherRid(producer, 1, 20);
 
     CountDownLatch notify = new CountDownLatch(records.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
     List<ReceivedRawRecord> res = new ArrayList<>();
-      var lock = new ReentrantLock();
-    Consumer consumer = createConsumer(hStreamClient, subscription, "test-consumer", res, notify, lock);
+    var lock = new ReentrantLock();
+    Consumer consumer =
+        createConsumer(hStreamClient, subscription, "test-consumer", res, notify, lock);
     consumer.startAsync().awaitRunning();
     var done = notify.await(10, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(
         records, res.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList()));
+    System.out.println("Consume before restart: ");
+    for (ReceivedRawRecord record : res) {
+      System.out.println(record.getRecordId());
+    }
+    // leave some time to server to write checkpoint
+    Thread.sleep(5000);
+    System.out.println(server.getLogs());
 
     restartServer(server);
     res.clear();
 
     Producer producer2 =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(10).build();
-    records = doProduceAndGatherRid(producer2, 10, 10);
+    records = doProduceAndGatherRid(producer2, 1, 30);
     CountDownLatch notify2 = new CountDownLatch(records.size());
     Consumer consumer2 =
-        createConsumer(hStreamClient, subscription, "test-consumer-new", res, notify2);
+        createConsumer(hStreamClient, subscription, "test-consumer-new", res, notify2, lock);
     consumer2.startAsync().awaitRunning();
     done = notify2.await(10, TimeUnit.SECONDS);
-    Thread.sleep(1000);
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    Assertions.assertEquals(records.size(), res.size());
+    Assertions.assertEquals(
+        records.size(),
+        res.size(),
+        "records.size = " + records.size() + ", res.size = " + res.size());
     Assertions.assertEquals(
         records, res.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList()));
   }
@@ -275,10 +286,6 @@ class BasicTest {
   @Timeout(60)
   void testWriteRaw() throws Exception {
     final String streamName = randStream(hStreamClient);
-    List<Stream> streams = hStreamClient.listStreams();
-    Assertions.assertEquals(1, streams.size());
-    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
-
     var producer = hStreamClient.newProducer().stream(streamName).build();
     var rand = new Random();
     byte[] record = new byte[128];
@@ -313,7 +320,7 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void testWriteRawOutOfPayloadLimit() {
+  void testWriteRawOutOfPayloadLimitShouldFailed() {
     int max = 1024 * 1024 + 20;
     final String streamName = randStream(hStreamClient);
     var producer = hStreamClient.newProducer().stream(streamName).build();
@@ -348,7 +355,7 @@ class BasicTest {
 
     CountDownLatch notify = new CountDownLatch(rawRecords.size() + hRecords.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    List<HRecord> hres = new ArrayList<>();
+    List<HRecord> hRes = new ArrayList<>();
     List<String> rawRes = new ArrayList<>();
     Consumer consumer =
         hStreamClient
@@ -357,7 +364,7 @@ class BasicTest {
             .name("test-consumer")
             .hRecordReceiver(
                 ((hRecord, responder) -> {
-                  hres.add(hRecord.getHRecord());
+                  hRes.add(hRecord.getHRecord());
                   responder.ack();
                   notify.countDown();
                 }))
@@ -374,7 +381,7 @@ class BasicTest {
     Assertions.assertTrue(done);
     var hRecordInput =
         hRecords.parallelStream().map(HRecord::toString).collect(Collectors.toList());
-    var hOutputRecord = hres.parallelStream().map(HRecord::toString).collect(Collectors.toList());
+    var hOutputRecord = hRes.parallelStream().map(HRecord::toString).collect(Collectors.toList());
     Assertions.assertEquals(hRecordInput, hOutputRecord);
     Assertions.assertEquals(rawRecords, rawRes);
   }
@@ -464,24 +471,12 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void testWriteRawRecordWithLoop() throws Exception {
+  void testNoBatchWriteInForLoopShouldNotStuck() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer = hStreamClient.newProducer().stream(streamName).build();
-    Random rand = new Random();
-    byte[] rRec = new byte[128];
-    var records = new ArrayList<String>();
-    var xs = new CompletableFuture[100];
-    for (int i = 0; i < 100; i++) {
-      rand.nextBytes(rRec);
-      records.add(Arrays.toString(rRec));
-      xs[i] = producer.write(rRec);
-    }
-    CompletableFuture.allOf(xs).join();
-    for (int i = 0; i < 100; i++) {
-      Assertions.assertNotNull(xs[i]);
-    }
+    var records = doProduce(producer, 128, 100);
 
-    CountDownLatch notify = new CountDownLatch(xs.length);
+    CountDownLatch notify = new CountDownLatch(records.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
     List<String> res = new ArrayList<>();
     Consumer consumer =
@@ -512,20 +507,17 @@ class BasicTest {
     Producer producer =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
     Random rand = new Random();
-    var xs = new CompletableFuture[100];
+    var futures = new CompletableFuture[100];
     var records = new ArrayList<HRecord>();
     for (int i = 0; i < 100; i++) {
       HRecord hRec =
           HRecord.newBuilder().put("x", rand.nextInt()).put("y", rand.nextDouble()).build();
-      xs[i] = producer.write(hRec);
+      futures[i] = producer.write(hRec);
       records.add(hRec);
     }
-    CompletableFuture.allOf(xs).join();
-    for (int i = 0; i < 100; i++) {
-      Assertions.assertNotNull(xs[i]);
-    }
+    CompletableFuture.allOf(futures).join();
 
-    CountDownLatch notify = new CountDownLatch(xs.length);
+    CountDownLatch notify = new CountDownLatch(futures.length);
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
     List<HRecord> res = new ArrayList<>();
     var lock = new ReentrantLock();
@@ -562,7 +554,7 @@ class BasicTest {
             .build();
     Random rand = new Random();
     final int cnt = 100;
-    var xs = new CompletableFuture[100];
+    var futures = new CompletableFuture[100];
 
     Thread t0 =
         new Thread(
@@ -570,7 +562,7 @@ class BasicTest {
               for (int i = 0; i < cnt / 2; i++) {
                 byte[] rRec = new byte[128];
                 rand.nextBytes(rRec);
-                xs[i] = producer.write(rRec);
+                futures[i] = producer.write(rRec);
               }
             });
 
@@ -580,7 +572,7 @@ class BasicTest {
               for (int i = cnt / 2; i < cnt; i++) {
                 byte[] rRec = new byte[128];
                 rand.nextBytes(rRec);
-                xs[i] = producer.write(rRec);
+                futures[i] = producer.write(rRec);
               }
             });
 
@@ -589,13 +581,13 @@ class BasicTest {
     t0.join();
     t1.join();
     for (int i = 0; i < cnt; i++) {
-      Assertions.assertNotNull(xs[i]);
+      Assertions.assertNotNull(futures[i]);
     }
   }
 
   @Test
   @Timeout(60)
-  void testWriteBatchAndNoBatchRecords() throws Exception {
+  void testMixWriteBatchAndNoBatchRecords() throws Exception {
     final String streamName = randStream(hStreamClient);
     int totalWrites = 10;
     int batchWrites = 0;
@@ -613,7 +605,6 @@ class BasicTest {
 
     for (int i = 0; i < totalWrites; i++) {
       int next = rand.nextInt(10);
-
       if (next % 2 == 0) {
         batchWrites++;
         System.out.printf("[turn]: %d, batch write!!!!!\n", i);
@@ -636,7 +627,7 @@ class BasicTest {
         new CountDownLatch(batchWrites * batchSize + (totalWrites - batchWrites));
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
     List<String> res = new ArrayList<>();
-    List<RecordId> rrid = new ArrayList<>();
+    List<RecordId> receivedRecordIds = new ArrayList<>();
     Consumer consumer =
         hStreamClient
             .newConsumer()
@@ -646,7 +637,7 @@ class BasicTest {
                 ((rawRecord, responder) -> {
                   lock.lock();
                   res.add(Arrays.toString(rawRecord.getRawRecord()));
-                  rrid.add(rawRecord.getRecordId());
+                  receivedRecordIds.add(rawRecord.getRecordId());
                   lock.unlock();
                   responder.ack();
                   notify.countDown();
@@ -654,7 +645,6 @@ class BasicTest {
             .build();
     consumer.startAsync().awaitRunning();
     var done = notify.await(20, TimeUnit.SECONDS);
-    //    Thread.sleep(5000);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     System.out.printf(
@@ -666,8 +656,8 @@ class BasicTest {
       System.out.println(recordIds.get(i) + ": " + records.get(i));
     }
     System.out.println("received rid");
-    for (int i = 0; i < rrid.size(); i++) {
-      System.out.println(rrid.get(i) + ": " + res.get(i));
+    for (int i = 0; i < receivedRecordIds.size(); i++) {
+      System.out.println(receivedRecordIds.get(i) + ": " + res.get(i));
     }
 
     Assertions.assertEquals(records.size(), res.size());
@@ -703,7 +693,7 @@ class BasicTest {
         () -> {
           var exp = consumer1.failureCause().toString();
           System.err.println("exp: " + exp);
-          throw consumer1.failureCause().getCause();
+          throw consumer1.failureCause();
         });
 
     Assertions.fail("create consumer with existed consumer name should fail.");
@@ -719,7 +709,7 @@ class BasicTest {
     var rids = doProduceAndGatherRid(producer, 10, 2500);
     CountDownLatch notify = new CountDownLatch(rids.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    List<RecordId> res = new ArrayList<>();
+    Set<RecordId> res = new HashSet<>();
     var lock = new ReentrantLock();
     Consumer consumer =
         hStreamClient
@@ -743,7 +733,6 @@ class BasicTest {
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
 
-    List<RecordId> reTrans = new ArrayList<>();
     CountDownLatch notify1 = new CountDownLatch(rids.size() - res.size());
     Consumer consumer1 =
         hStreamClient
@@ -753,15 +742,17 @@ class BasicTest {
             .rawRecordReceiver(
                 ((rawRecord, responder) -> {
                   lock.lock();
-                  reTrans.add(rawRecord.getRecordId());
+                  boolean success = res.add(rawRecord.getRecordId());
                   lock.unlock();
                   responder.ack();
-                  notify1.countDown();
+                  if (success) {
+                    notify1.countDown();
+                  }
                 }))
             .build();
 
     consumer1.startAsync().awaitRunning();
-    done = notify1.await(10, TimeUnit.SECONDS);
+    done = notify1.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     // This assert may fail because we can not guarantee that consumer1
@@ -769,7 +760,6 @@ class BasicTest {
     // some retrans happen. Also, we are now support at-least-once
     // consume, so we can ignore these duplicated retrans for now.
     // Assertions.assertTrue(Collections.disjoint(res, reTrans));
-    res.addAll(reTrans);
     Assertions.assertEquals(
         rids.stream().sorted().collect(Collectors.toList()),
         res.stream().sorted().collect(Collectors.toList()));
@@ -837,7 +827,7 @@ class BasicTest {
   @Disabled("enable after HS-809 fix.")
   @Test
   @Timeout(60)
-  void testSubscribeInMiddle() throws Exception {
+  void testSubscribeInMiddleOfBatch() throws Exception {
     final String streamName = randStream(hStreamClient);
     Producer producer =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(2).build();
@@ -995,10 +985,10 @@ class BasicTest {
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(10).build();
     Random rand = new Random();
     var records = doProduce(producer, 128, 1000);
-    CountDownLatch notify = new CountDownLatch(records.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+
+    CountDownLatch notify = new CountDownLatch(records.size());
     List<String> res1 = new ArrayList<>();
-    AtomicInteger i = new AtomicInteger();
     var responders = new LinkedList<Responder>();
     var missCnt = new AtomicInteger(50);
     var lock = new ReentrantLock();
@@ -1047,7 +1037,6 @@ class BasicTest {
                     var respd = responders.poll();
                     lock.unlock();
                     respd.ack();
-                    i.getAndIncrement();
                   }
                   notify.countDown();
                 }))
@@ -1059,12 +1048,10 @@ class BasicTest {
     while (!responders.isEmpty()) {
       var respd = responders.poll();
       respd.ack();
-      i.getAndIncrement();
     }
     consumer.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    System.out.printf("===========resend: %d\n", i.get());
     System.out.printf(
         "records.size = %d, res.size = %d\n", records.size(), res1.size() + res2.size());
     Assertions.assertEquals(records.size(), res1.size() + res2.size());
@@ -1280,9 +1267,11 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  //  @Disabled("enable after HS-810 fix.")
-  @Test
+  @Disabled(
+      "HS-810 not fix, also start and terminate consumer more frequently may cause other test"
+          + " failed.")
   @Timeout(60)
+  @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
     final String streamName = randStream(hStreamClient);
     final String subscription = randSubscriptionWithTimeout(hStreamClient, streamName, 1);
@@ -1290,12 +1279,12 @@ class BasicTest {
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(50).build();
     final int count = 20000;
     Random rand = new Random();
-    List<RecordId> records = doProduceAndGatherRid(producer, 100, count);
     CountDownLatch signal = new CountDownLatch(count);
-    var receivedRecords = new ArrayList<ArrayList<ReceivedRawRecord>>();
     int consumerNameSuffix = 1;
-    var consumers = new ArrayList<Consumer>();
     var lock = new ReentrantLock();
+    List<RecordId> records = doProduceAndGatherRid(producer, 100, count);
+    var receivedRecords = new ArrayList<ArrayList<ReceivedRawRecord>>();
+    var consumers = new ArrayList<Consumer>();
     for (int i = 0; i < 3; i++) {
       receivedRecords.add(new ArrayList<>());
       consumers.add(
@@ -1304,28 +1293,26 @@ class BasicTest {
               subscription,
               "consumer-" + consumerNameSuffix,
               receivedRecords.get(0),
-              signal, lock));
+              signal,
+              lock));
       consumerNameSuffix++;
     }
-    //    consumers.add(
-    //        createConsumer(hStreamClient, subscription, "consumer-4", receivedRecords.get(3),
-    // signal));
     consumers.forEach(c -> c.startAsync().awaitRunning());
 
     int cnt = 8;
     int lastIdx = -1;
     int alive = consumers.size();
-    while (cnt > 0) {
+    while (signal.getCount() != 0 && cnt > 0) {
       Thread.sleep(2000);
       int idx = rand.nextInt(consumers.size());
       if (idx != lastIdx) {
-        System.err.println("turn: " + (8 - cnt));
+        System.out.println("turn: " + (8 - cnt));
         if (consumers.get(idx).isRunning()) {
           consumers.get(idx).stopAsync().awaitTerminated();
           System.out.println("==================== stop consumer: " + (idx + 1));
           alive--;
           if (alive == 0) {
-            System.out.println("!!!!!!!!!!!!!!!! noConsumer");
+            System.out.println("no consumer alive!");
           }
         } else {
           var newConsumer =
@@ -1334,7 +1321,8 @@ class BasicTest {
                   subscription,
                   "consumer-" + consumerNameSuffix,
                   receivedRecords.get(idx),
-                  signal, lock);
+                  signal,
+                  lock);
           newConsumer.startAsync().awaitRunning();
           consumerNameSuffix++;
           consumers.set(idx, newConsumer);
@@ -1344,7 +1332,7 @@ class BasicTest {
         lastIdx = idx;
         cnt--;
       }
-      System.err.println("countDownLatch.count = " + signal.getCount());
+      System.out.println("countDownLatch.count = " + signal.getCount());
     }
     System.out.println("Dynamic adjustment done. consumer stats: ");
     for (int i = 0; i < consumers.size(); i++) {
@@ -1357,19 +1345,22 @@ class BasicTest {
       System.out.printf("Conumer %d: %s\n", i, state);
     }
 
-    for (int i = 0; i < consumers.size(); i++) {
-      if (!consumers.get(i).isRunning()) {
-        var newConsumer =
-            createConsumer(
-                hStreamClient,
-                subscription,
-                "consumer-" + consumerNameSuffix,
-                receivedRecords.get(i),
-                signal, lock);
-        newConsumer.startAsync().awaitRunning();
-        consumerNameSuffix++;
-        consumers.set(i, newConsumer);
-        System.out.println("==================== start consumer: " + (i + 1));
+    if (signal.getCount() != 0) {
+      for (int i = 0; i < consumers.size(); i++) {
+        if (!consumers.get(i).isRunning()) {
+          var newConsumer =
+              createConsumer(
+                  hStreamClient,
+                  subscription,
+                  "consumer-" + consumerNameSuffix,
+                  receivedRecords.get(i),
+                  signal,
+                  lock);
+          newConsumer.startAsync().awaitRunning();
+          consumerNameSuffix++;
+          consumers.set(i, newConsumer);
+          System.out.println("==================== start consumer: " + (i + 1));
+        }
       }
     }
 

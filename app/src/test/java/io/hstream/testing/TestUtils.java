@@ -277,7 +277,7 @@ public class TestUtils {
       rand.nextBytes(rRec);
       writes.add(producer.write(rRec));
     }
-    writes.forEach(w -> w.thenAccept(rids::add));
+    writes.forEach(w -> rids.add(w.join()));
     return rids;
   }
 
