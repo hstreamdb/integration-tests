@@ -16,6 +16,7 @@ import static io.hstream.testing.TestUtils.restartServer;
 import io.hstream.Consumer;
 import io.hstream.HRecord;
 import io.hstream.HStreamClient;
+import io.hstream.HStreamDBClientException;
 import io.hstream.Producer;
 import io.hstream.ReceivedRawRecord;
 import io.hstream.RecordId;
@@ -194,42 +195,6 @@ class BasicTest {
     for (Thread t : threads) {
       t.join();
     }
-  }
-
-  @Disabled("restart may cause test fail, disable")
-  @Test
-  @Timeout(60)
-  void testReconsumeAllDataFromSameSubscriptionAfterServerRestart() throws Exception {
-    final String streamName = randStream(hStreamClient);
-    Producer producer =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
-    var records = doProduce(producer, 128, 100);
-    CountDownLatch notify = new CountDownLatch(records.size());
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    List<String> res = new ArrayList<>();
-    var lock = new ReentrantLock();
-    Consumer consumer =
-        createConsumerCollectStringPayload(
-            hStreamClient, subscription, "test-consumer", res, notify, lock);
-    consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
-    consumer.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
-    Assertions.assertEquals(records, res);
-
-    restartServer(server);
-    res.clear();
-    CountDownLatch notify2 = new CountDownLatch(records.size());
-
-    final String subscription1 = randSubscriptionFromEarliest(hStreamClient, streamName);
-    Consumer consumer2 =
-        createConsumerCollectStringPayload(
-            hStreamClient, subscription1, "test-consumer", res, notify2, lock);
-    consumer2.startAsync().awaitRunning();
-    done = notify2.await(10, TimeUnit.SECONDS);
-    consumer2.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
-    Assertions.assertEquals(records, res);
   }
 
   @Disabled("enable after HS-806 fix.")
@@ -664,7 +629,8 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled("enable after client support dump failure.")
+  @Disabled(
+      "currently it will cause other test failed, should find another way to check exception.")
   @Test
   @Timeout(60)
   void createConsumerWithExistedConsumerNameShouldThrowException() throws InterruptedException {
@@ -688,15 +654,8 @@ class BasicTest {
     Thread.sleep(1500);
     consumer1.startAsync().awaitRunning();
     Thread.sleep(1500);
-    Assertions.assertThrows(
-        Exception.class,
-        () -> {
-          var exp = consumer1.failureCause().toString();
-          System.err.println("exp: " + exp);
-          throw consumer1.failureCause();
-        });
-
-    Assertions.fail("create consumer with existed consumer name should fail.");
+    Assertions.assertNotNull(consumer1.failureCause());
+    Assertions.assertTrue(consumer1.failureCause() instanceof HStreamDBClientException);
   }
 
   @Test
@@ -1114,11 +1073,11 @@ class BasicTest {
 
     Producer producer =
         hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(50).build();
-    List<String> records = doProduce(producer, 100, 2500);
+    List<RecordId> records = doProduceAndGatherRid(producer, 1, 2500);
     Random random = new Random();
     final int maxReceivedCountC1 = Math.max(1, random.nextInt(recordCount / 3));
     CountDownLatch latch1 = new CountDownLatch(1);
-    var res1 = new ArrayList<ReceivedRawRecord>();
+    var res1 = new HashSet<RecordId>();
     var lock = new ReentrantLock();
     var consumer1 =
         createConsumerWithFixNumsRecords(
@@ -1126,7 +1085,7 @@ class BasicTest {
 
     final int maxReceivedCountC2 = Math.max(1, random.nextInt(recordCount / 3));
     CountDownLatch latch2 = new CountDownLatch(1);
-    var res2 = new ArrayList<ReceivedRawRecord>();
+    var res2 = new HashSet<RecordId>();
     var consumer2 =
         createConsumerWithFixNumsRecords(
             hStreamClient, maxReceivedCountC2, subscription, "consumer2", res2, latch2, lock);
@@ -1140,38 +1099,40 @@ class BasicTest {
     System.out.println("remove consumer1 and consumer2...");
     Assertions.assertTrue(done1);
     Assertions.assertTrue(done2);
+    Thread.sleep(1000); // leave some time to server to complete ack
 
-    Thread.sleep(3000);
-
-    final int maxReceivedCountC3 = recordCount - maxReceivedCountC1 - maxReceivedCountC2;
-    CountDownLatch latch3 = new CountDownLatch(1);
-    var res3 = new ArrayList<ReceivedRawRecord>();
+    var consumedRecordIds =
+        java.util.stream.Stream.of(res1, res2)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet());
+    CountDownLatch latch3 = new CountDownLatch(recordCount - consumedRecordIds.size());
     var consumer3 =
-        createConsumerWithFixNumsRecords(
-            hStreamClient, maxReceivedCountC3, subscription, "consumer2", res3, latch3, lock);
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("consumer3")
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  lock.lock();
+                  var success = consumedRecordIds.add(receivedRawRecord.getRecordId());
+                  lock.unlock();
+                  responder.ack();
+                  if (success) {
+                    latch3.countDown();
+                  }
+                })
+            .build();
 
     consumer3.startAsync().awaitRunning();
     var done3 = latch3.await(10, TimeUnit.SECONDS);
+    Thread.sleep(1000); // leave some time to server to complete ack
     consumer3.stopAsync().awaitTerminated();
     Assertions.assertTrue(done3);
-
-    System.out.printf(
-        "c1 consume: %d. c2 consume: %d, c3 consume: %d\n", res1.size(), res2.size(), res3.size());
-    Assertions.assertEquals(recordCount, res1.size() + res2.size() + res3.size());
-    // we support at-least-once consume now, some duplicated retrans is allowed.
-    //    var set1 = res1.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
-    //    var set2 = res2.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
-    //    var set3 = res3.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toSet());
-    //    Assertions.assertTrue(
-    //        Collections.disjoint(set1, set3), "consumer1 and consumer3 received same recordId");
-    //    Assertions.assertTrue(
-    //        Collections.disjoint(set2, set3), "consumer2 and consumer3 received same recordId");
-    var res =
-        java.util.stream.Stream.of(res1, res2, res3)
-            .flatMap(Collection::stream)
-            .sorted(Comparator.comparing(ReceivedRawRecord::getRecordId))
-            .map(r -> Arrays.toString(r.getRawRecord()))
-            .collect(Collectors.toList());
+    var res = consumedRecordIds.stream().sorted().collect(Collectors.toList());
+    Assertions.assertEquals(
+        records.size(),
+        res.size(),
+        "records.size = " + records.size() + ", res.size = " + res.size());
     Assertions.assertEquals(records, res);
   }
 
@@ -1267,9 +1228,7 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled(
-      "HS-810 not fix, also start and terminate consumer more frequently may cause other test"
-          + " failed.")
+  @Disabled("may cause other test failed")
   @Timeout(60)
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {

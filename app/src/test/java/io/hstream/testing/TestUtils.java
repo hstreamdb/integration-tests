@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -136,7 +137,9 @@ public class TestUtils {
                 + "6440"
                 + " --log-level "
                 + "debug"
-                + " --log-with-color")
+                + " --log-with-color"
+                + " --store-log-level "
+                + "error")
         .waitingFor(Wait.forLogMessage(".*Server is starting on port.*", 1));
   }
 
@@ -207,23 +210,23 @@ public class TestUtils {
       int nums,
       String subscription,
       String name,
-      List<ReceivedRawRecord> records,
+      Set<RecordId> records,
       CountDownLatch latch,
       ReentrantLock lock) {
-    final int maxReceivedCountC1 = nums;
-    AtomicInteger c1ReceivedRecordCount = new AtomicInteger(0);
+    final int maxReceivedCount = nums;
+    AtomicInteger receivedRecordCount = new AtomicInteger(0);
     return client
         .newConsumer()
         .subscription(subscription)
         .name(name)
         .rawRecordReceiver(
             (receivedRawRecord, responder) -> {
-              if (c1ReceivedRecordCount.get() < maxReceivedCountC1) {
+              if (receivedRecordCount.get() < maxReceivedCount) {
                 lock.lock();
-                records.add(receivedRawRecord);
+                var success = records.add(receivedRawRecord.getRecordId());
                 lock.unlock();
                 responder.ack();
-                if (c1ReceivedRecordCount.incrementAndGet() == maxReceivedCountC1) {
+                if (success && receivedRecordCount.incrementAndGet() == maxReceivedCount) {
                   latch.countDown();
                 }
               }
