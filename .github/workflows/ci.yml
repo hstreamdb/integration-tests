@@ -41,3 +41,25 @@ jobs:
           path: |
             .logs
             app/build/reports
+
+      - name: Post to Slack channel
+        if: ${{ github.event.client_payload.notify }} && ${{ failure() }}
+        uses: slackapi/slack-github-action@v1.17.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "${{ env.SLACK_MESSAGE_TEXT }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ env.SLACK_MESSAGE_TEXT }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_MESSAGE_TEXT: "GitHub Action build result: ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
