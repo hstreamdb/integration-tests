@@ -57,7 +57,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
       hServers.add(hServer);
       hServerUrls.add(hServerAddress + ":" + hServerPort);
     }
-    Thread.sleep(100);
+    Thread.sleep(1000);
 
     Object testInstance = context.getRequiredTestInstance();
     testInstance
