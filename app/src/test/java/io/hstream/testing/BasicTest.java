@@ -148,7 +148,6 @@ class BasicTest {
     Assertions.assertThrows(Exception.class, () -> hStreamClient.deleteSubscription("aaa"));
   }
 
-  @Disabled("restart may cause test fail, disable")
   @Test
   @Timeout(60)
   void testGetResourceAfterRestartServer() throws Exception {
@@ -629,8 +628,6 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled(
-      "currently it will cause other test failed, should find another way to check exception.")
   @Test
   @Timeout(60)
   void createConsumerWithExistedConsumerNameShouldThrowException() throws InterruptedException {
@@ -656,6 +653,7 @@ class BasicTest {
     Thread.sleep(1500);
     Assertions.assertNotNull(consumer1.failureCause());
     Assertions.assertTrue(consumer1.failureCause() instanceof HStreamDBClientException);
+    consumer.stopAsync().awaitTerminated();
   }
 
   @Test
@@ -1228,7 +1226,6 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled("may cause other test failed")
   @Timeout(60)
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
@@ -1339,5 +1336,9 @@ class BasicTest {
             .distinct()
             .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
+
+    for (int i = 0; i < consumers.size(); i++) {
+      consumers.get(i).stopAsync().awaitTerminated();
+    }
   }
 }
