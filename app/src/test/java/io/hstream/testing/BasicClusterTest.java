@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.GenericContainer;
 
 @ExtendWith(ClusterExtension.class)
@@ -17,6 +18,8 @@ class BasicClusterTest {
   private HStreamClient hStreamClient;
   private List<GenericContainer<?>> hServers;
   private List<String> hServerUrls;
+  private String logMsgPathPrefix;
+  private ExtensionContext context;
 
   public void setHStreamDBUrl(String hStreamDBUrl) {
     this.hStreamDBUrl = hStreamDBUrl;
@@ -28,6 +31,14 @@ class BasicClusterTest {
 
   public void setHServerUrls(List<String> hServerUrls) {
     this.hServerUrls = hServerUrls;
+  }
+
+  public void setLogMsgPathPrefix(String logMsgPathPrefix) {
+    this.logMsgPathPrefix = logMsgPathPrefix;
+  }
+
+  public void setExtensionContext(ExtensionContext context) {
+    this.context = context;
   }
 
   @BeforeEach
