@@ -41,7 +41,6 @@ class SingleNodeTest {
   @BeforeEach
   public void setup() throws Exception {
     System.out.println("db url: " + hStreamDBUrl);
-    // Thread.sleep(1000000);
     hStreamClient = HStreamClient.builder().serviceUrl(hStreamDBUrl).build();
   }
 

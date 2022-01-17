@@ -47,11 +47,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 @ExtendWith(ClusterExtension.class)
 class BasicTest {
 
+  private static Logger logger = LoggerFactory.getLogger(BasicTest.class);
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
   private List<GenericContainer<?>> hServers;
@@ -81,7 +84,7 @@ class BasicTest {
 
   @BeforeEach
   public void setup() throws Exception {
-    System.out.println("[DEBUG]: hStreamDBUrl " + hStreamDBUrl);
+    logger.debug(" hStreamDBUrl " + hStreamDBUrl);
     hStreamClient = HStreamClient.builder().serviceUrl(hStreamDBUrl).build();
   }
 

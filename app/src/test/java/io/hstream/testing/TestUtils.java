@@ -26,6 +26,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.GenericContainer;
@@ -33,6 +35,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 public class TestUtils {
+
+  private static Logger logger = LoggerFactory.getLogger(TestUtils.class);
 
   public static String randText() {
     return UUID.randomUUID().toString().replace("-", "");
@@ -150,7 +154,7 @@ public class TestUtils {
     String testClassName = context.getRequiredTestClass().getSimpleName();
     String testName = context.getTestMethod().get().getName();
     String fileName = "../.logs/" + testClassName + "/" + testName + "/" + grp + "/" + entryName;
-    System.out.println("[DEBUG]: log to " + fileName);
+    logger.debug(" log to " + fileName);
 
     File file = new File(fileName);
     file.getParentFile().mkdirs();
@@ -300,15 +304,15 @@ public class TestUtils {
   }
 
   private static void printFlag(String flag, ExtensionContext context) {
-    System.out.println(
+    logger.info(
         "=====================================================================================");
-    System.out.printf(
-        "[DEBUG]: %s %s %s %s\n",
+    logger.info(
+        "%s %s %s %s\n",
         flag,
         context.getRequiredTestInstance().getClass().getSimpleName(),
         context.getTestMethod().get().getName(),
         context.getDisplayName());
-    System.out.println(
+    logger.info(
         "=====================================================================================");
   }
 

@@ -15,11 +15,14 @@ import java.util.UUID;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
   static final int CLUSTER_SIZE = 3;
+  private static Logger logger = LoggerFactory.getLogger(ClusterExtension.class);
   private final List<GenericContainer<?>> hServers = new ArrayList<>(CLUSTER_SIZE);
   private final List<String> hServerUrls = new ArrayList<>(CLUSTER_SIZE);
   private Path dataDir;
@@ -37,12 +40,12 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     zk = makeZooKeeper();
     zk.start();
     String zkHost = "127.0.0.1";
-    System.out.println("[DEBUG]: zkHost: " + zkHost);
+    logger.debug("zkHost: " + zkHost);
 
     hstore = makeHStore(dataDir);
     hstore.start();
     String hstoreHost = "127.0.0.1";
-    System.out.println("[DEBUG]: hstoreHost: " + hstoreHost);
+    logger.debug("hstoreHost: " + hstoreHost);
 
     String hServerAddress = "127.0.0.1";
     for (int i = 0; i < CLUSTER_SIZE; ++i) {

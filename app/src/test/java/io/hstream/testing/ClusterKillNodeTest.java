@@ -15,11 +15,14 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 @ExtendWith(ClusterExtension.class)
 public class ClusterKillNodeTest {
 
+  private static Logger logger = LoggerFactory.getLogger(ClusterKillNodeTest.class);
   private final Random random = new Random(System.currentTimeMillis());
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
@@ -49,7 +52,7 @@ public class ClusterKillNodeTest {
   }
 
   private void terminateHServerWithLogs(int turn, int serverId) throws Exception {
-    System.out.println("[DEBUG]: terminate HServer" + serverId);
+    logger.debug(" terminate HServer" + serverId);
     String logs = hServers.get(serverId).getLogs();
     Assertions.assertNotNull(logs);
     writeLog(context, "hserver-" + serverId + "-turn-" + turn, logMsgPathPrefix, logs);
@@ -58,7 +61,7 @@ public class ClusterKillNodeTest {
 
   @BeforeEach
   public void setup() throws Exception {
-    System.out.println("[DEBUG]: hStreamDBUrl " + hStreamDBUrl);
+    logger.debug(" hStreamDBUrl " + hStreamDBUrl);
     hStreamClient = HStreamClient.builder().serviceUrl(hStreamDBUrl).build();
   }
 
@@ -100,7 +103,7 @@ public class ClusterKillNodeTest {
   @RepeatedTest(5)
   void write() throws Exception {
     var streamName = TestUtils.randText();
-    System.out.println("[DEBUG]: HServer cluster size is " + hServers.size());
+    logger.debug(" HServer cluster size is " + hServers.size());
     int luckyServer = random.nextInt(hServers.size());
     System.out.println("lucky server is " + luckyServer);
     hStreamClient.createStream(streamName);
