@@ -3,6 +3,8 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
+import static io.hstream.testing.TestUtils.printBeginFlag;
+import static io.hstream.testing.TestUtils.printEndFlag;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
@@ -13,38 +15,37 @@ import java.util.UUID;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
   static final int CLUSTER_SIZE = 3;
+  private static Logger logger = LoggerFactory.getLogger(ClusterExtension.class);
   private final List<GenericContainer<?>> hServers = new ArrayList<>(CLUSTER_SIZE);
   private final List<String> hServerUrls = new ArrayList<>(CLUSTER_SIZE);
   private Path dataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
+  private String grp;
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: begin %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+    grp = UUID.randomUUID().toString();
+    printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
 
     zk = makeZooKeeper();
     zk.start();
     String zkHost = "127.0.0.1";
-    System.out.println("[DEBUG]: zkHost: " + zkHost);
+    logger.debug("zkHost: " + zkHost);
 
     hstore = makeHStore(dataDir);
     hstore.start();
     String hstoreHost = "127.0.0.1";
-    System.out.println("[DEBUG]: hstoreHost: " + hstoreHost);
+    logger.debug("hstoreHost: " + hstoreHost);
 
     String hServerAddress = "127.0.0.1";
     for (int i = 0; i < CLUSTER_SIZE; ++i) {
@@ -57,7 +58,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
       hServers.add(hServer);
       hServerUrls.add(hServerAddress + ":" + hServerPort);
     }
-    Thread.sleep(100);
+    Thread.sleep(1000);
 
     Object testInstance = context.getRequiredTestInstance();
     testInstance
@@ -69,11 +70,19 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
         .getClass()
         .getMethod("setHServerUrls", List.class)
         .invoke(testInstance, hServerUrls);
+
+    testInstance
+        .getClass()
+        .getMethod("setLogMsgPathPrefix", String.class)
+        .invoke(testInstance, grp);
+    testInstance
+        .getClass()
+        .getMethod("setExtensionContext", ExtensionContext.class)
+        .invoke(testInstance, context);
   }
 
   @Override
   public void afterEach(ExtensionContext context) throws Exception {
-    String grp = UUID.randomUUID().toString();
 
     for (int i = 0; i < hServers.size(); i++) {
       var hServer = hServers.get(i);
@@ -89,12 +98,6 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     writeLog(context, "zk", grp, zk.getLogs());
     zk.close();
 
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: end %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+    printEndFlag(context);
   }
 }

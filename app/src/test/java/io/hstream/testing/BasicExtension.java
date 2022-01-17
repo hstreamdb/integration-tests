@@ -3,6 +3,8 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.makeHServer;
 import static io.hstream.testing.TestUtils.makeHStore;
 import static io.hstream.testing.TestUtils.makeZooKeeper;
+import static io.hstream.testing.TestUtils.printBeginFlag;
+import static io.hstream.testing.TestUtils.printEndFlag;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import java.nio.file.Files;
@@ -11,10 +13,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
+  private static Logger logger = LoggerFactory.getLogger(BasicExtension.class);
   private Path dataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
@@ -22,25 +27,19 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: begin %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+    printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
 
     zk = makeZooKeeper();
     zk.start();
     String zkHost = "127.0.0.1";
-    System.out.println("[DEBUG]: zkHost: " + zkHost);
+    logger.debug(" zkHost: " + zkHost);
 
     hstore = makeHStore(dataDir);
     hstore.start();
     String hstoreHost = "127.0.0.1";
-    System.out.println("[DEBUG]: hstoreHost: " + hstoreHost);
+    logger.debug(" hstoreHost: " + hstoreHost);
 
     String hServerAddress = "127.0.0.1";
     int hServerPort = 6570;
@@ -48,7 +47,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     hserver =
         makeHServer(hServerAddress, hServerPort, hServerInnerPort, dataDir, zkHost, hstoreHost, 0);
     hserver.start();
-    Thread.sleep(100);
+    Thread.sleep(1000);
     Object testInstance = context.getRequiredTestInstance();
     testInstance
         .getClass()
@@ -77,12 +76,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     hstore = null;
     zk = null;
     dataDir = null;
-    System.out.println(
-        "================================================================================");
-    System.out.printf(
-        "[DEBUG]: end %s %s\n",
-        context.getRequiredTestInstance().getClass().getSimpleName(), context.getDisplayName());
-    System.out.println(
-        "================================================================================");
+
+    printEndFlag(context);
   }
 }

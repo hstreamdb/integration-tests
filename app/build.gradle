@@ -24,6 +24,9 @@ dependencies {
 
     testImplementation 'io.hstream:hstreamdb-java:0.6.2-SNAPSHOT'
     testImplementation 'com.github.docker-java:docker-java:3.2.12'
+
+    compileOnly 'org.slf4j:slf4j-api:1.7.30'
+    testImplementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.17.0'
 }
 
 tasks.named('test') {

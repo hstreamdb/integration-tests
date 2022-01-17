@@ -11,7 +11,6 @@ import static io.hstream.testing.TestUtils.randSubscriptionFromEarliest;
 import static io.hstream.testing.TestUtils.randSubscriptionWithOffset;
 import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
 import static io.hstream.testing.TestUtils.randText;
-import static io.hstream.testing.TestUtils.restartServer;
 
 import io.hstream.Consumer;
 import io.hstream.HRecord;
@@ -40,29 +39,52 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
-@ExtendWith(BasicExtension.class)
+@ExtendWith(ClusterExtension.class)
 class BasicTest {
 
+  private static Logger logger = LoggerFactory.getLogger(BasicTest.class);
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
-  private GenericContainer<?> server;
+  private List<GenericContainer<?>> hServers;
+  private List<String> hServerUrls;
+  private String logMsgPathPrefix;
+  private ExtensionContext context;
 
   public void setHStreamDBUrl(String hStreamDBUrl) {
     this.hStreamDBUrl = hStreamDBUrl;
   }
 
-  public void setServer(GenericContainer<?> s) {
-    this.server = s;
+  public void setHServers(List<GenericContainer<?>> hServers) {
+    this.hServers = hServers;
+  }
+
+  public void setHServerUrls(List<String> hServerUrls) {
+    this.hServerUrls = hServerUrls;
+  }
+
+  public void setLogMsgPathPrefix(String logMsgPathPrefix) {
+    this.logMsgPathPrefix = logMsgPathPrefix;
+  }
+
+  public void setExtensionContext(ExtensionContext context) {
+    this.context = context;
   }
 
   @BeforeEach
   public void setup() throws Exception {
-    System.out.println("db url: " + hStreamDBUrl);
-    // Thread.sleep(1000000);
+    logger.debug(" hStreamDBUrl " + hStreamDBUrl);
     hStreamClient = HStreamClient.builder().serviceUrl(hStreamDBUrl).build();
   }
 
@@ -71,7 +93,30 @@ class BasicTest {
     hStreamClient.close();
   }
 
+  void produce(Producer p, int tid) throws InterruptedException {
+    Random rand = new Random();
+    byte[] rRec = new byte[128];
+    for (int i = 0; i < 1000; i++) {
+      System.out.println("Thread " + tid + " write");
+      rand.nextBytes(rRec);
+      p.write(rRec).join();
+    }
+  }
+
   // -----------------------------------------------------------------------------------------------
+
+  @Test
+  @Timeout(20)
+  void testConnections() throws Exception {
+
+    for (var hServerUrl : hServerUrls) {
+      System.out.println(hServerUrl);
+      try (HStreamClient client = HStreamClient.builder().serviceUrl(hServerUrl).build()) {
+        List<Stream> res = client.listStreams();
+        Assertions.assertTrue(res.isEmpty());
+      }
+    }
+  }
 
   @Test
   @Timeout(60)
@@ -146,105 +191,6 @@ class BasicTest {
   @Timeout(60)
   void testDeleteNonExistingSubscriptionShouldFail() {
     Assertions.assertThrows(Exception.class, () -> hStreamClient.deleteSubscription("aaa"));
-  }
-
-  @Disabled("restart may cause test fail, disable")
-  @Test
-  @Timeout(60)
-  void testGetResourceAfterRestartServer() throws Exception {
-    final String streamName = randStream(hStreamClient);
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    restartServer(server);
-    var streams = hStreamClient.listStreams();
-    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
-    var subscriptions = hStreamClient.listSubscriptions();
-    Assertions.assertEquals(subscription, subscriptions.get(0).getSubscriptionId());
-  }
-
-  void produce(Producer p, int tid) throws InterruptedException {
-    Random rand = new Random();
-    byte[] rRec = new byte[128];
-    for (int i = 0; i < 1000; i++) {
-      System.out.println("Thread " + tid + " write");
-      rand.nextBytes(rRec);
-      p.write(rRec).join();
-    }
-  }
-
-  @Test
-  @Timeout(60)
-  void testMultiProducer() throws Exception {
-    var threads = new ArrayList<Thread>();
-    for (int i = 0; i < 10; i++) {
-      int finalI = i;
-      threads.add(
-          new Thread(
-              () -> {
-                final String streamName = randStream(hStreamClient);
-                Producer producer = hStreamClient.newProducer().stream(streamName).build();
-                try {
-                  produce(producer, finalI);
-                } catch (InterruptedException e) {
-                  e.printStackTrace();
-                }
-              }));
-    }
-    for (Thread t : threads) {
-      t.start();
-    }
-    for (Thread t : threads) {
-      t.join();
-    }
-  }
-
-  @Disabled("enable after HS-806 fix.")
-  @Test
-  @Timeout(60)
-  void testAckedRecordShouldNotReTransAfterServerRestart() throws Exception {
-    final String streamName = randStream(hStreamClient);
-    Producer producer =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(5).build();
-    var records = doProduceAndGatherRid(producer, 1, 20);
-
-    CountDownLatch notify = new CountDownLatch(records.size());
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
-    List<ReceivedRawRecord> res = new ArrayList<>();
-    var lock = new ReentrantLock();
-    Consumer consumer =
-        createConsumer(hStreamClient, subscription, "test-consumer", res, notify, lock);
-    consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
-    consumer.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
-    Assertions.assertEquals(
-        records, res.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList()));
-    System.out.println("Consume before restart: ");
-    for (ReceivedRawRecord record : res) {
-      System.out.println(record.getRecordId());
-    }
-    // leave some time to server to write checkpoint
-    Thread.sleep(5000);
-    System.out.println(server.getLogs());
-
-    restartServer(server);
-    res.clear();
-
-    Producer producer2 =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(10).build();
-    records = doProduceAndGatherRid(producer2, 1, 30);
-    CountDownLatch notify2 = new CountDownLatch(records.size());
-    Consumer consumer2 =
-        createConsumer(hStreamClient, subscription, "test-consumer-new", res, notify2, lock);
-    consumer2.startAsync().awaitRunning();
-    done = notify2.await(10, TimeUnit.SECONDS);
-    consumer2.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
-    Assertions.assertEquals(
-        records.size(),
-        res.size(),
-        "records.size = " + records.size() + ", res.size = " + res.size());
-    Assertions.assertEquals(
-        records, res.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList()));
   }
 
   @Test
@@ -624,13 +570,10 @@ class BasicTest {
     for (int i = 0; i < receivedRecordIds.size(); i++) {
       System.out.println(receivedRecordIds.get(i) + ": " + res.get(i));
     }
-
     Assertions.assertEquals(records.size(), res.size());
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled(
-      "currently it will cause other test failed, should find another way to check exception.")
   @Test
   @Timeout(60)
   void createConsumerWithExistedConsumerNameShouldThrowException() throws InterruptedException {
@@ -656,6 +599,7 @@ class BasicTest {
     Thread.sleep(1500);
     Assertions.assertNotNull(consumer1.failureCause());
     Assertions.assertTrue(consumer1.failureCause() instanceof HStreamDBClientException);
+    consumer.stopAsync().awaitTerminated();
   }
 
   @Test
@@ -714,8 +658,8 @@ class BasicTest {
     done = notify1.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    // This assert may fail because we can not guarantee that consumer1
-    // will stop after all acks are send successfully, so there might be
+    // This asserts may fail because we can not guarantee that consumer1
+    // will stop after all ACKs are sent successfully, so there might be
     // some retrans happen. Also, we are now support at-least-once
     // consume, so we can ignore these duplicated retrans for now.
     // Assertions.assertTrue(Collections.disjoint(res, reTrans));
@@ -844,8 +788,7 @@ class BasicTest {
     System.out.println(rids.get(randomIndex));
     System.out.println(rids);
     System.out.println(rec);
-    Assertions.assertEquals(
-        records.stream().skip(randomIndex).collect(Collectors.toList()).size(), res.size());
+    Assertions.assertEquals((int) records.stream().skip(randomIndex).count(), res.size());
     Assertions.assertEquals(records.stream().skip(randomIndex).collect(Collectors.toList()), res);
   }
 
@@ -1228,7 +1171,6 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled("may cause other test failed")
   @Timeout(60)
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
@@ -1324,6 +1266,7 @@ class BasicTest {
     }
 
     boolean done = signal.await(20, TimeUnit.SECONDS);
+    System.out.println(signal.getCount());
     Assertions.assertTrue(
         done,
         "timeout, total received: "
@@ -1339,5 +1282,9 @@ class BasicTest {
             .distinct()
             .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
+
+    for (int i = 0; i < consumers.size(); i++) {
+      consumers.get(i).stopAsync().awaitTerminated();
+    }
   }
 }
