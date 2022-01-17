@@ -101,7 +101,7 @@ class BasicTest {
     Random rand = new Random();
     byte[] rRec = new byte[128];
     for (int i = 0; i < 1000; i++) {
-      System.out.println("Thread " + tid + " write");
+      logger.info("Thread " + tid + " write");
       rand.nextBytes(rRec);
       p.write(rRec).join();
     }
@@ -114,7 +114,7 @@ class BasicTest {
   void testConnections() throws Exception {
 
     for (var hServerUrl : hServerUrls) {
-      System.out.println(hServerUrl);
+      logger.info("hServerUrl is " + hServerUrl);
       try (HStreamClient client = HStreamClient.builder().serviceUrl(hServerUrl).build()) {
         List<Stream> res = client.listStreams();
         Assertions.assertTrue(res.isEmpty());
@@ -522,7 +522,7 @@ class BasicTest {
       int next = rand.nextInt(10);
       if (next % 2 == 0) {
         batchWrites++;
-        System.out.printf("[turn]: %d, batch write!!!!!\n", i);
+        logger.info("[turn]: {}, batch write!!!!!\n", i);
         var writes = new ArrayList<CompletableFuture<RecordId>>(5);
         for (int j = 0; j < batchSize; j++) {
           var rRec = new byte[] {(byte) i};
@@ -531,7 +531,7 @@ class BasicTest {
         }
         writes.forEach(w -> recordIds.add(w.join()));
       } else {
-        System.out.printf("[turn]: %d, no batch write!!!!!\n", i);
+        logger.info("[turn]: {}, no batch write!!!!!\n", i);
         var rRec = new byte[] {(byte) i};
         records.add(Arrays.toString(rRec));
         recordIds.add(producer.write(rRec).join());
@@ -562,17 +562,18 @@ class BasicTest {
     var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    System.out.printf(
-        "wait join !!!!! batch writes = %d, single writes = %d\n",
-        batchWrites, totalWrites - batchWrites);
-    System.out.println("send rid: ");
+    logger.info(
+        "wait join !!!!! batch writes = {}, single writes = {}\n",
+        batchWrites,
+        totalWrites - batchWrites);
+    logger.info("send rid: ");
     Assertions.assertEquals(recordIds.size(), records.size());
     for (int i = 0; i < recordIds.size(); i++) {
-      System.out.println(recordIds.get(i) + ": " + records.get(i));
+      logger.info(recordIds.get(i) + ": " + records.get(i));
     }
-    System.out.println("received rid");
+    logger.info("received rid");
     for (int i = 0; i < receivedRecordIds.size(); i++) {
-      System.out.println(receivedRecordIds.get(i) + ": " + res.get(i));
+      logger.info(receivedRecordIds.get(i) + ": " + res.get(i));
     }
     Assertions.assertEquals(records.size(), res.size());
     Assertions.assertEquals(records, res);
@@ -724,8 +725,8 @@ class BasicTest {
             hStreamClient, subscription, "test-consumer", res, notify, lock);
     consumer.startAsync().awaitRunning();
     var done = notify.await(35, TimeUnit.SECONDS);
-    System.out.println("records size = " + records.size());
-    System.out.println("res size = " + res.size());
+    logger.info("records size = " + records.size());
+    logger.info("res size = " + res.size());
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done, "consumer time out");
     Assertions.assertEquals(records, res);
@@ -789,9 +790,9 @@ class BasicTest {
     var done = notify.await(10, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    System.out.println(rids.get(randomIndex));
-    System.out.println(rids);
-    System.out.println(rec);
+    logger.info("randomIndex = " + String.valueOf(rids.get(randomIndex)));
+    logger.info("rids = " + String.valueOf(rids));
+    logger.info("rec = " + String.valueOf(rec));
     Assertions.assertEquals((int) records.stream().skip(randomIndex).count(), res.size());
     Assertions.assertEquals(records.stream().skip(randomIndex).collect(Collectors.toList()), res);
   }
@@ -958,8 +959,7 @@ class BasicTest {
     consumer.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
-    System.out.printf(
-        "records.size = %d, res.size = %d\n", records.size(), res1.size() + res2.size());
+    logger.info("records.size = {}, res.size = {}\n", records.size(), res1.size() + res2.size());
     Assertions.assertEquals(records.size(), res1.size() + res2.size());
     res1.addAll(res2);
     Assertions.assertEquals(
@@ -1043,7 +1043,7 @@ class BasicTest {
     var done2 = latch2.await(10, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
-    System.out.println("remove consumer1 and consumer2...");
+    logger.info("remove consumer1 and consumer2...");
     Assertions.assertTrue(done1);
     Assertions.assertTrue(done2);
     Thread.sleep(1000); // leave some time to server to complete ack
@@ -1211,13 +1211,13 @@ class BasicTest {
       Thread.sleep(2000);
       int idx = rand.nextInt(consumers.size());
       if (idx != lastIdx) {
-        System.out.println("turn: " + (8 - cnt));
+        logger.info("turn: " + (8 - cnt));
         if (consumers.get(idx).isRunning()) {
           consumers.get(idx).stopAsync().awaitTerminated();
-          System.out.println("==================== stop consumer: " + (idx + 1));
+          logger.info("==================== stop consumer: " + (idx + 1));
           alive--;
           if (alive == 0) {
-            System.out.println("no consumer alive!");
+            logger.info("no consumer alive!");
           }
         } else {
           var newConsumer =
@@ -1231,15 +1231,15 @@ class BasicTest {
           newConsumer.startAsync().awaitRunning();
           consumerNameSuffix++;
           consumers.set(idx, newConsumer);
-          System.out.println("==================== start consumer: " + (idx + 1));
+          logger.info("==================== start consumer: " + (idx + 1));
           alive++;
         }
         lastIdx = idx;
         cnt--;
       }
-      System.out.println("countDownLatch.count = " + signal.getCount());
+      logger.info("countDownLatch.count = " + signal.getCount());
     }
-    System.out.println("Dynamic adjustment done. consumer stats: ");
+    logger.info("Dynamic adjustment done. consumer stats: ");
     for (int i = 0; i < consumers.size(); i++) {
       String state;
       if (consumers.get(i).isRunning()) {
@@ -1247,7 +1247,7 @@ class BasicTest {
       } else {
         state = "Stop";
       }
-      System.out.printf("Conumer %d: %s\n", i, state);
+      logger.info("Consumer {}: {}\n", i, state);
     }
 
     if (signal.getCount() != 0) {
@@ -1264,13 +1264,13 @@ class BasicTest {
           newConsumer.startAsync().awaitRunning();
           consumerNameSuffix++;
           consumers.set(i, newConsumer);
-          System.out.println("==================== start consumer: " + (i + 1));
+          logger.info("==================== start consumer: " + (i + 1));
         }
       }
     }
 
     boolean done = signal.await(20, TimeUnit.SECONDS);
-    System.out.println(signal.getCount());
+    logger.info("signal count = " + signal.getCount());
     Assertions.assertTrue(
         done,
         "timeout, total received: "

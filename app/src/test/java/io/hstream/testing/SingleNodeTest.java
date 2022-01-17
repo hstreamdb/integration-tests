@@ -21,11 +21,14 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 
 @ExtendWith(BasicExtension.class)
 class SingleNodeTest {
 
+  private static final Logger logger = LoggerFactory.getLogger(SingleNodeTest.class);
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
   private GenericContainer<?> server;
@@ -40,7 +43,7 @@ class SingleNodeTest {
 
   @BeforeEach
   public void setup() throws Exception {
-    System.out.println("db url: " + hStreamDBUrl);
+    logger.debug("db url: " + hStreamDBUrl);
     hStreamClient = HStreamClient.builder().serviceUrl(hStreamDBUrl).build();
   }
 

@@ -127,7 +127,7 @@ public class ClusterKillNodeTest {
     String streamName = TestUtils.randText();
     logger.debug("HServer cluster size is " + hServers.size());
     int luckyServer = random.nextInt(hServers.size());
-    System.out.println("lucky server is " + luckyServer);
+    logger.info("lucky server is " + luckyServer);
     hStreamClient.createStream(streamName);
     var producer = hStreamClient.newProducer().stream(streamName).build();
     new Thread(
@@ -151,9 +151,9 @@ public class ClusterKillNodeTest {
         .start();
 
     for (int i = 0; i < hServers.size() * 20; ++i) {
-      System.out.println("ready for writing record " + i);
+      logger.info("ready for writing record " + i);
       var recordId = producer.write(("hello" + i).getBytes(StandardCharsets.UTF_8)).join();
-      System.out.println(recordId);
+      logger.info("recordId is " + String.valueOf(recordId));
       try {
         Thread.sleep(100);
       } catch (InterruptedException e) {

@@ -292,12 +292,12 @@ public class TestUtils {
   public static void restartServer(GenericContainer<?> server) throws Exception {
     server.close();
     Thread.sleep(5000); // need time to let zk clear old data
-    System.out.println("begin restart!");
+    logger.info("begin restart!");
     try {
       if (server.isRunning()) Thread.sleep(2000);
       server.withStartupTimeout(Duration.ofSeconds(5)).start();
     } catch (ContainerLaunchException e) {
-      System.out.println("start hserver failed, try another restart.");
+      logger.info("start hserver failed, try another restart.");
       server.close();
       Thread.sleep(5000);
       server.withStartupTimeout(Duration.ofSeconds(5)).start();
