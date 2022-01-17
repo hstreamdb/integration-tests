@@ -11,11 +11,13 @@ import io.hstream.Producer;
 import io.hstream.RecordId;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +33,7 @@ import org.testcontainers.containers.GenericContainer;
 @ExtendWith(ClusterExtension.class)
 public class ClusterKillNodeTest {
 
-  private static Logger logger = LoggerFactory.getLogger(ClusterKillNodeTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(ClusterKillNodeTest.class);
   private final Random random = new Random(System.currentTimeMillis());
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
@@ -310,5 +312,59 @@ public class ClusterKillNodeTest {
     ArrayList<RecordId> recordIds1 = new ArrayList<>(recordIds0);
     recordIds1.sort(RecordId::compareTo);
     Assertions.assertEquals(recordIds0, recordIds1);
+  }
+
+  @Test
+  void testJoinConsumerGroupBeforeAndAfterKillNodes() throws Exception {
+    String stream = randStream(hStreamClient);
+    String subscription = randSubscription(hStreamClient, stream);
+    ArrayList<RecordId> recordIds = new ArrayList<>();
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+    for (int i = 0; i < 32; ++i) {
+      recordIds.add(
+          producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+    }
+
+    ArrayList<RecordId> recordIds1 = new ArrayList<>();
+    CountDownLatch countDownLatch1 = new CountDownLatch(32);
+    Consumer consumer1 =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  recordIds1.add(recs.getRecordId());
+                  countDownLatch1.countDown();
+                })
+            .build();
+    consumer1.startAsync().awaitRunning();
+    countDownLatch1.await();
+    consumer1.stopAsync().awaitTerminated();
+
+    List<Integer> serverIds =
+        Arrays.stream(new int[] {0, 1, 2}).boxed().collect(Collectors.toList());
+    Collections.shuffle(serverIds);
+    terminateHServerWithLogs(0, serverIds.get(0));
+    terminateHServerWithLogs(0, serverIds.get(1));
+    Thread.sleep(2000);
+
+    ArrayList<RecordId> recordIds2 = new ArrayList<>();
+    CountDownLatch countDownLatch2 = new CountDownLatch(32);
+    Consumer consumer2 =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  recordIds2.add(recs.getRecordId());
+                  countDownLatch2.countDown();
+                })
+            .build();
+    consumer2.startAsync().awaitRunning();
+    countDownLatch2.await();
+    consumer2.stopAsync().awaitTerminated();
+
+    Assertions.assertEquals(recordIds, recordIds1);
+    Assertions.assertEquals(recordIds, recordIds2);
   }
 }

@@ -51,7 +51,6 @@ class SingleNodeTest {
 
   // -----------------------------------------------------------------------------------------------
 
-  @Disabled("restart may cause test fail, disable")
   @Test
   @Timeout(60)
   void testGetResourceAfterRestartServer() throws Exception {
