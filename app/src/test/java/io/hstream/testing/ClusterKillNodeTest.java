@@ -2,12 +2,20 @@ package io.hstream.testing;
 
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
+import static io.hstream.testing.TestUtils.restartServer;
 import static io.hstream.testing.TestUtils.writeLog;
 
+import io.hstream.Consumer;
 import io.hstream.HStreamClient;
+import io.hstream.Producer;
+import io.hstream.RecordId;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -82,15 +90,22 @@ public class ClusterKillNodeTest {
 
   @Test
   @Timeout(60)
+  void testListSubscriptionAfterKillNodes() {
+    String stream = randStream(hStreamClient);
+    String subscription = randSubscription(hStreamClient, stream);
+    hServers.get(0).close();
+    hServers.get(1).close();
+    Assertions.assertEquals(
+        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
+  }
+
+  @Test
+  @Timeout(60)
   void testListStreamsShouldFailWhenAllNodesAreUnavailable() throws Exception {
     for (int i = 0; i < 3; i++) {
       terminateHServerWithLogs(0, i);
     }
-    Assertions.assertThrows(
-        Exception.class,
-        () -> {
-          hStreamClient.listStreams();
-        });
+    Assertions.assertThrows(Exception.class, hStreamClient::listStreams);
   }
 
   @Test
@@ -106,8 +121,8 @@ public class ClusterKillNodeTest {
 
   @RepeatedTest(5)
   @Timeout(60)
-  void write() throws Exception {
-    var streamName = TestUtils.randText();
+  void testWrite() throws Exception {
+    String streamName = TestUtils.randText();
     logger.debug(" HServer cluster size is " + hServers.size());
     int luckyServer = random.nextInt(hServers.size());
     System.out.println("lucky server is " + luckyServer);
@@ -143,5 +158,157 @@ public class ClusterKillNodeTest {
         throw new RuntimeException(e);
       }
     }
+  }
+
+  @RepeatedTest(3)
+  void testReadHalfWayDropNodes() throws Exception {
+    final String stream = randStream(hStreamClient);
+    final String subscription = randSubscription(hStreamClient, stream);
+    final int cnt = 32;
+
+    ArrayList<Integer> xs = new ArrayList<>();
+    for (int i = 0; i < 3; ++i) {
+      xs.add(i);
+    }
+    Collections.shuffle(xs);
+
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+    ArrayList<RecordId> recordIds0 = new ArrayList<>();
+
+    for (int i = 0; i < cnt; ++i) {
+      recordIds0.add(
+          producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+    }
+    Assertions.assertEquals(cnt, recordIds0.size());
+
+    CountDownLatch countDown = new CountDownLatch(cnt);
+    ArrayList<RecordId> recordIds1 = new ArrayList<>();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .name("newConsumer")
+            .subscription(subscription)
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  recordIds1.add(recs.getRecordId());
+                  recv.ack();
+                  countDown.countDown();
+                  if (countDown.getCount() == 10 || countDown.getCount() == 20) {
+                    try {
+                      terminateHServerWithLogs(0, xs.get((int) (countDown.getCount() / 10)));
+                    } catch (Exception e) {
+                      throw new RuntimeException(e);
+                    }
+                  }
+                })
+            .build();
+
+    consumer.startAsync().awaitRunning();
+    countDown.await();
+    consumer.stopAsync().awaitTerminated();
+
+    Assertions.assertEquals(recordIds0, recordIds1);
+  }
+
+  @Test
+  void testWriteAfterKillStreamHost() throws Exception {
+    String stream = randStream(hStreamClient);
+
+    Random rand = new Random();
+    byte[] randRecs = new byte[128];
+
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+    rand.nextBytes(randRecs);
+    RecordId id0 = producer.write(randRecs).join();
+
+    terminateHServerWithLogs(0, 0);
+    terminateHServerWithLogs(0, 1);
+
+    producer = hStreamClient.newProducer().stream(stream).build();
+    rand.nextBytes(randRecs);
+    RecordId id1 = producer.write(randRecs).join();
+
+    Assertions.assertTrue(id0.compareTo(id1) < 0);
+  }
+
+  @Test
+  void testRestartNodeJoinCluster() throws Exception {
+    terminateHServerWithLogs(0, 2);
+    Thread.sleep(10 * 1000);
+    String stream = randStream(hStreamClient);
+    Thread.sleep(5 * 1000);
+    hServers.get(2).start();
+    Thread.sleep(15 * 1000);
+    terminateHServerWithLogs(0, 0);
+    terminateHServerWithLogs(0, 1);
+    Thread.sleep(5 * 1000);
+
+    Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
+
+    Random rand = new Random();
+    byte[] randRecs = new byte[128];
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+    rand.nextBytes(randRecs);
+    RecordId id0 = producer.write(randRecs).join();
+    rand.nextBytes(randRecs);
+    RecordId id1 = producer.write(randRecs).join();
+    Assertions.assertTrue(id0.compareTo(id1) < 0);
+  }
+
+  @Test
+  void testWriteAfterKillNodes() throws Exception {
+    terminateHServerWithLogs(0, 1);
+    Thread.sleep(5 * 1000);
+    terminateHServerWithLogs(0, 2);
+    Thread.sleep(5 * 1000);
+    String stream = randStream(hStreamClient);
+
+    restartServer(hServers.get(1));
+    Assertions.assertTrue(hServers.get(1).isRunning());
+    Assertions.assertNotNull(hServers.get(1).getLogs());
+    Thread.sleep(5 * 1000);
+    Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
+    terminateHServerWithLogs(0, 0);
+    Thread.sleep(5 * 1000);
+    Assertions.assertFalse(hServers.get(0).isRunning());
+    Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
+    String subscription = randSubscription(hStreamClient, stream);
+
+    restartServer(hServers.get(2));
+    Thread.sleep(5 * 1000);
+    Assertions.assertTrue(hServers.get(2).isRunning());
+    Assertions.assertNotNull(hServers.get(2).getLogs());
+    Assertions.assertEquals(
+        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
+    terminateHServerWithLogs(1, 1);
+    Thread.sleep(5 * 1000);
+    Assertions.assertFalse(hServers.get(1).isRunning());
+    hStreamClient.close();
+    hStreamClient = HStreamClient.builder().serviceUrl("127.0.0.1:6572").build();
+    Assertions.assertEquals(
+        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+
+    restartServer(hServers.get(0));
+    Thread.sleep(5 * 1000);
+    Assertions.assertTrue(hServers.get(0).isRunning());
+    Assertions.assertNotNull(hServers.get(0).getLogs());
+    ArrayList<RecordId> recordIds0 = new ArrayList<>();
+    recordIds0.add(
+        producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+    recordIds0.add(
+        producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+
+    terminateHServerWithLogs(1, 2);
+    Thread.sleep(5 * 1000);
+    Assertions.assertFalse(hServers.get(2).isRunning());
+    recordIds0.add(
+        producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+    recordIds0.add(
+        producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+
+    ArrayList<RecordId> recordIds1 = new ArrayList<>(recordIds0);
+    recordIds1.sort(RecordId::compareTo);
+    Assertions.assertEquals(recordIds0, recordIds1);
   }
 }

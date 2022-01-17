@@ -307,7 +307,7 @@ public class TestUtils {
     logger.info(
         "=====================================================================================");
     logger.info(
-        "%s %s %s %s\n",
+        "{} {} {} {}\n",
         flag,
         context.getRequiredTestInstance().getClass().getSimpleName(),
         context.getTestMethod().get().getName(),
