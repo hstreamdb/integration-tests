@@ -76,7 +76,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
-  void killAllShouldFail() throws Exception {
+  void testListStreamsShouldFailWhenAllNodesAreUnavailable() throws Exception {
     for (int i = 0; i < 3; i++) {
       terminateHServerWithLogs(0, i);
     }
