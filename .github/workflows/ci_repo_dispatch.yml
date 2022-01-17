@@ -1,9 +1,8 @@
-name: Java CI
+name: Java CI on Repository Dispatch
 on:
-  push:
+  repository_dispatch:
     branches: [main]
-  pull_request:
-    branches: [main]
+    types: image_updated
 
 jobs:
   java-test:
@@ -37,3 +36,12 @@ jobs:
           path: |
             .logs
             app/build/reports
+
+      - name: Post to Slack channel
+        if: ${{ success() }} || ${{ failure() }}
+        run: |
+          curl                                  \
+            -X POST                             \
+            -H 'Content-Type: application/json' \
+            ${{ secrets.SLACK_WEB_HOOK_URL }}   \
+            --data "{\"data\": \"GitHub Action build result: ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}\"}"
