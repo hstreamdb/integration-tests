@@ -34,12 +34,12 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     zk = makeZooKeeper();
     zk.start();
     String zkHost = "127.0.0.1";
-    logger.debug(" zkHost: " + zkHost);
+    logger.debug("zkHost: " + zkHost);
 
     hstore = makeHStore(dataDir);
     hstore.start();
     String hstoreHost = "127.0.0.1";
-    logger.debug(" hstoreHost: " + hstoreHost);
+    logger.debug("hstoreHost: " + hstoreHost);
 
     String hServerAddress = "127.0.0.1";
     int hServerPort = 6570;

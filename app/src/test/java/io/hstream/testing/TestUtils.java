@@ -89,7 +89,7 @@ public class TestUtils {
 
   public static GenericContainer<?> makeHStore(Path dataDir) {
     return new GenericContainer<>(DockerImageName.parse("hstreamdb/hstream:latest"))
-        // .withNetwork(network)
+        // .withImagePullPolicy(PullPolicy.alwaysPull())
         .withNetworkMode("host")
         .withFileSystemBind(
             dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_WRITE)
@@ -116,6 +116,7 @@ public class TestUtils {
       String hstoreHost,
       int serverId) {
     return new GenericContainer<>(DockerImageName.parse("hstreamdb/hstream:latest"))
+        // .withImagePullPolicy(PullPolicy.alwaysPull())
         .withNetworkMode("host")
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
         .withCommand(
@@ -154,7 +155,7 @@ public class TestUtils {
     String testClassName = context.getRequiredTestClass().getSimpleName();
     String testName = context.getTestMethod().get().getName();
     String fileName = "../.logs/" + testClassName + "/" + testName + "/" + grp + "/" + entryName;
-    logger.debug(" log to " + fileName);
+    logger.debug("log to " + fileName);
 
     File file = new File(fileName);
     file.getParentFile().mkdirs();
@@ -307,7 +308,7 @@ public class TestUtils {
     logger.info(
         "=====================================================================================");
     logger.info(
-        "{} {} {} {}\n",
+        "{} {} {} {}",
         flag,
         context.getRequiredTestInstance().getClass().getSimpleName(),
         context.getTestMethod().get().getName(),

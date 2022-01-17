@@ -88,7 +88,7 @@ class BasicTest {
 
   @BeforeEach
   public void setup() throws Exception {
-    logger.debug(" hStreamDBUrl " + hStreamDBUrl);
+    logger.debug("hStreamDBUrl " + hStreamDBUrl);
     hStreamClient = HStreamClient.builder().serviceUrl(hStreamDBUrl).build();
   }
 
