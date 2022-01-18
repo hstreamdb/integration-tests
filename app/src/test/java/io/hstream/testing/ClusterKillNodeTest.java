@@ -163,6 +163,7 @@ public class ClusterKillNodeTest {
   }
 
   @RepeatedTest(3)
+  @Timeout(60)
   void testReadHalfWayDropNodes() throws Exception {
     final String stream = randStream(hStreamClient);
     final String subscription = randSubscription(hStreamClient, stream);
@@ -213,6 +214,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void testWriteAfterKillStreamHost() throws Exception {
     String stream = randStream(hStreamClient);
 
@@ -234,6 +236,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void testRestartNodeJoinCluster() throws Exception {
     terminateHServerWithLogs(0, 2);
     Thread.sleep(10 * 1000);
@@ -258,6 +261,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void testWriteAfterKillNodes() throws Exception {
     terminateHServerWithLogs(0, 1);
     Thread.sleep(5 * 1000);
@@ -315,6 +319,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void testJoinConsumerGroupBeforeAndAfterKillNodes() throws Exception {
     String stream = randStream(hStreamClient);
     String subscription = randSubscription(hStreamClient, stream);

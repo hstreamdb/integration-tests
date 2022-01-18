@@ -1293,6 +1293,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testReadHalfWayDropStream() throws Exception {
     final String stream = randStream(hStreamClient);
     final int total = 20;
@@ -1337,6 +1338,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testReadHalfWayDropSubscription() throws Exception {
     final String stream = randStream(hStreamClient);
     final int total = 20;
@@ -1381,6 +1383,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testWriteToDeletedStreamShouldFail() throws Exception {
     String stream = randStream(hStreamClient);
 
@@ -1399,6 +1402,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testMultiThreadListStream() throws Exception {
     randStream(hStreamClient);
 
@@ -1413,6 +1417,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testMultiThreadCreateSameStream() throws Exception {
     ArrayList<Exception> exceptions = new ArrayList<>();
 
@@ -1445,6 +1450,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void createDeleteStreamFromNodes() throws Exception {
     ArrayList<HStreamClient> clients = new ArrayList<>();
     for (String hServerUrl : hServerUrls) {
@@ -1459,6 +1465,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testMultiThreadDeleteSameStream() throws Exception {
     ArrayList<Exception> exceptions = new ArrayList<>();
 
@@ -1491,6 +1498,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testWriteRawReadFromNodes() throws Exception {
     Random rand = new Random();
     byte[] randRecs = new byte[128];
@@ -1522,6 +1530,7 @@ class BasicTest {
   }
 
   @Test
+  @Timeout(60)
   void testWriteFromNodesSeq() throws Exception {
     Random rand = new Random();
     byte[] randBytes = new byte[128];
