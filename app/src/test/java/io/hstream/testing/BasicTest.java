@@ -1283,8 +1283,8 @@ class BasicTest {
             .collect(Collectors.toList());
     Assertions.assertEquals(records, res);
 
-    for (int i = 0; i < consumers.size(); i++) {
-      consumers.get(i).stopAsync().awaitTerminated();
+    for (Consumer consumer : consumers) {
+      consumer.stopAsync().awaitTerminated();
     }
   }
 }

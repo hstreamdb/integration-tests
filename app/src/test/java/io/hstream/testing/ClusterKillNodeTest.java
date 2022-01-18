@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.slf4j.Logger;
@@ -71,6 +72,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void listStreamAfterKillNodes() {
     String stream = randStream(hStreamClient);
     hServers.get(0).close();
@@ -79,6 +81,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void testListStreamsShouldFailWhenAllNodesAreUnavailable() throws Exception {
     for (int i = 0; i < 3; i++) {
       terminateHServerWithLogs(0, i);
@@ -91,6 +94,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
+  @Timeout(60)
   void listSubscriptionAfterKillNodes() {
     String stream = randStream(hStreamClient);
     String subscription = randSubscription(hStreamClient, stream);
@@ -101,6 +105,7 @@ public class ClusterKillNodeTest {
   }
 
   @RepeatedTest(5)
+  @Timeout(60)
   void write() throws Exception {
     var streamName = TestUtils.randText();
     logger.debug(" HServer cluster size is " + hServers.size());
