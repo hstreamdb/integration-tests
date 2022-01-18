@@ -196,7 +196,11 @@ public class ClusterKillNodeTest {
                 (recs, recv) -> {
                   recordIds1.add(recs.getRecordId());
                   recv.ack();
-                  countDown.countDown();
+
+                  if (!recordIds1.contains(recs.getRecordId())) {
+                    countDown.countDown();
+                  }
+
                   if (countDown.getCount() == 10 || countDown.getCount() == 20) {
                     try {
                       terminateHServerWithLogs(0, xs.get((int) (countDown.getCount() / 10)));
@@ -262,7 +266,7 @@ public class ClusterKillNodeTest {
   }
 
   @Test
-  @Timeout(60)
+  @Timeout(90)
   void testWriteAfterKillNodes() throws Exception {
     terminateHServerWithLogs(0, 1);
     Thread.sleep(5 * 1000);
