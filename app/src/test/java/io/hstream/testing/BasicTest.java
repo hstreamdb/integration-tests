@@ -227,7 +227,7 @@ class BasicTest {
                 }))
             .build();
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertArrayEquals(record, res.get(0));
@@ -291,7 +291,7 @@ class BasicTest {
                 }))
             .build();
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     var hRecordInput =
@@ -333,7 +333,7 @@ class BasicTest {
                 }))
             .build();
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(hRec.toString(), res.get(0).toString());
@@ -355,7 +355,7 @@ class BasicTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription, "test-consumer", res, notify, lock);
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
@@ -378,7 +378,7 @@ class BasicTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription, "test-consumer", res, notify, lock);
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
@@ -407,7 +407,7 @@ class BasicTest {
                 }))
             .build();
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done, "consumer timeout");
     Assertions.assertEquals(
@@ -451,7 +451,7 @@ class BasicTest {
                 }))
             .build();
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     var input = records.parallelStream().map(HRecord::toString).collect(Collectors.toList());
@@ -637,7 +637,7 @@ class BasicTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
 
@@ -703,7 +703,7 @@ class BasicTest {
                 }))
             .build();
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertArrayEquals(record, res.get(0));
@@ -787,7 +787,7 @@ class BasicTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     logger.info("randomIndex = " + String.valueOf(rids.get(randomIndex)));
@@ -860,7 +860,7 @@ class BasicTest {
     consumer1.startAsync().awaitRunning();
     consumer2.startAsync().awaitRunning();
 
-    var done = notify1.await(10, TimeUnit.SECONDS);
+    var done = notify1.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res1);
@@ -994,7 +994,7 @@ class BasicTest {
     consumer2.startAsync().awaitRunning();
     consumer3.startAsync().awaitRunning();
 
-    var done = signal.await(10, TimeUnit.SECONDS);
+    var done = signal.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     consumer3.stopAsync().awaitTerminated();
@@ -1039,8 +1039,8 @@ class BasicTest {
 
     consumer1.startAsync().awaitRunning();
     consumer2.startAsync().awaitRunning();
-    var done1 = latch1.await(10, TimeUnit.SECONDS);
-    var done2 = latch2.await(10, TimeUnit.SECONDS);
+    var done1 = latch1.await(20, TimeUnit.SECONDS);
+    var done2 = latch2.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     logger.info("remove consumer1 and consumer2...");
@@ -1071,7 +1071,7 @@ class BasicTest {
             .build();
 
     consumer3.startAsync().awaitRunning();
-    var done3 = latch3.await(10, TimeUnit.SECONDS);
+    var done3 = latch3.await(20, TimeUnit.SECONDS);
     Thread.sleep(1000); // leave some time to server to complete ack
     consumer3.stopAsync().awaitTerminated();
     Assertions.assertTrue(done3);
@@ -1110,7 +1110,7 @@ class BasicTest {
         createConsumer(hStreamClient, subscription, "consumer-3", res3, signal, lock);
     consumer3.startAsync().awaitRunning();
 
-    boolean done = signal.await(10, TimeUnit.SECONDS);
+    boolean done = signal.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
     consumer2.stopAsync().awaitTerminated();
     consumer3.stopAsync().awaitTerminated();
@@ -1330,7 +1330,7 @@ class BasicTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    countDown.await();
+    countDown.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(0, hStreamClient.listStreams().size());
@@ -1375,7 +1375,7 @@ class BasicTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    countDown.await();
+    countDown.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(0, hStreamClient.listSubscriptions().size());
@@ -1558,7 +1558,7 @@ class BasicTest {
                 })
             .build();
 
-    consumer.startAsync().awaitRunning(10, TimeUnit.SECONDS);
+    consumer.startAsync().awaitRunning(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
 
     ArrayList<RecordId> recIdsSeq = new ArrayList<>(recIds);

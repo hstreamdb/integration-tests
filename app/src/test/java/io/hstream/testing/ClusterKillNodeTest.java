@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -207,7 +208,7 @@ public class ClusterKillNodeTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    countDown.await();
+    countDown.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(recordIds0, recordIds1);
@@ -343,7 +344,7 @@ public class ClusterKillNodeTest {
                 })
             .build();
     consumer1.startAsync().awaitRunning();
-    countDownLatch1.await();
+    countDownLatch1.await(20, TimeUnit.SECONDS);
     consumer1.stopAsync().awaitTerminated();
 
     List<Integer> serverIds =
@@ -366,7 +367,7 @@ public class ClusterKillNodeTest {
                 })
             .build();
     consumer2.startAsync().awaitRunning();
-    countDownLatch2.await();
+    countDownLatch2.await(20, TimeUnit.SECONDS);
     consumer2.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(recordIds, recordIds1);

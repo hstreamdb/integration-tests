@@ -82,7 +82,7 @@ class SingleNodeTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription, "test-consumer", res, notify, lock);
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
@@ -96,7 +96,7 @@ class SingleNodeTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription1, "test-consumer", res, notify2, lock);
     consumer2.startAsync().awaitRunning();
-    done = notify2.await(10, TimeUnit.SECONDS);
+    done = notify2.await(20, TimeUnit.SECONDS);
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
@@ -119,7 +119,7 @@ class SingleNodeTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription, "test-consumer", res, notify, lock);
     consumer.startAsync().awaitRunning();
-    var done = notify.await(10, TimeUnit.SECONDS);
+    var done = notify.await(20, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
     Assertions.assertEquals(records, res);
@@ -135,7 +135,7 @@ class SingleNodeTest {
         createConsumerCollectStringPayload(
             hStreamClient, subscription, "test-consumer-new", res, notify2, lock);
     consumer2.startAsync().awaitRunning();
-    done = notify2.await(10, TimeUnit.SECONDS);
+    done = notify2.await(20, TimeUnit.SECONDS);
     Thread.sleep(1000);
     consumer2.stopAsync().awaitTerminated();
     Assertions.assertTrue(done);
