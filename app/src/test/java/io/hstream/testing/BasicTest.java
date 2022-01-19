@@ -1293,10 +1293,10 @@ class BasicTest {
   }
 
   @Test
-  @Timeout(60)
+  @Timeout(90)
   void testReadHalfWayDropStream() throws Exception {
     final String stream = randStream(hStreamClient);
-    final int total = 20;
+    final int total = 10000;
     final String subscription = randSubscription(hStreamClient, stream);
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
@@ -1330,7 +1330,7 @@ class BasicTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    countDown.await(20, TimeUnit.SECONDS);
+    Assertions.assertTrue(countDown.await(45, TimeUnit.SECONDS));
     consumer.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(0, hStreamClient.listStreams().size());
@@ -1338,10 +1338,10 @@ class BasicTest {
   }
 
   @Test
-  @Timeout(60)
+  @Timeout(90)
   void testReadHalfWayDropSubscription() throws Exception {
     final String stream = randStream(hStreamClient);
-    final int total = 20;
+    final int total = 10000;
     final String subscription = randSubscription(hStreamClient, stream);
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
@@ -1375,7 +1375,7 @@ class BasicTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    countDown.await(20, TimeUnit.SECONDS);
+    Assertions.assertTrue(countDown.await(60, TimeUnit.SECONDS));
     consumer.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(0, hStreamClient.listSubscriptions().size());

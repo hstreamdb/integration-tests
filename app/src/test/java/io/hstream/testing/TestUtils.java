@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -272,6 +273,25 @@ public class TestUtils {
       xs[i] = producer.write(rRec);
     }
     CompletableFuture.allOf(xs).join();
+    return records;
+  }
+
+  public static ArrayList<RecordId> doProduceReturnId(
+      Producer producer, int payloadSize, int recordsNums)
+      throws ExecutionException, InterruptedException {
+    Random rand = new Random();
+    byte[] rRec = new byte[payloadSize];
+    var records = new ArrayList<RecordId>();
+    var xs = new CompletableFuture<?>[recordsNums];
+    for (int i = 0; i < recordsNums; i++) {
+      rand.nextBytes(rRec);
+      xs[i] = producer.write(rRec);
+    }
+    CompletableFuture.allOf(xs).join();
+    for (var x : xs) {
+      records.add((RecordId) x.get());
+    }
+    Assertions.assertEquals(recordsNums, records.size());
     return records;
   }
 

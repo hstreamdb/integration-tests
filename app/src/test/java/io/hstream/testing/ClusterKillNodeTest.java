@@ -1,5 +1,6 @@
 package io.hstream.testing;
 
+import static io.hstream.testing.TestUtils.doProduceReturnId;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
 import static io.hstream.testing.TestUtils.restartServer;
@@ -13,8 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -164,11 +167,11 @@ public class ClusterKillNodeTest {
   }
 
   @RepeatedTest(3)
-  @Timeout(60)
+  @Timeout(90)
   void testReadHalfWayDropNodes() throws Exception {
     final String stream = randStream(hStreamClient);
     final String subscription = randSubscription(hStreamClient, stream);
-    final int cnt = 32;
+    final int cnt = 10000;
 
     ArrayList<Integer> xs = new ArrayList<>();
     for (int i = 0; i < 3; ++i) {
@@ -186,7 +189,7 @@ public class ClusterKillNodeTest {
     Assertions.assertEquals(cnt, recordIds0.size());
 
     CountDownLatch countDown = new CountDownLatch(cnt);
-    ArrayList<RecordId> recordIds1 = new ArrayList<>();
+    Set<RecordId> recordIds1 = new HashSet<>();
     Consumer consumer =
         hStreamClient
             .newConsumer()
@@ -194,28 +197,28 @@ public class ClusterKillNodeTest {
             .subscription(subscription)
             .rawRecordReceiver(
                 (recs, recv) -> {
-                  recordIds1.add(recs.getRecordId());
-                  recv.ack();
-
-                  if (!recordIds1.contains(recs.getRecordId())) {
+                  if (recordIds1.add(recs.getRecordId())) {
                     countDown.countDown();
                   }
+                  recv.ack();
 
-                  if (countDown.getCount() == 10 || countDown.getCount() == 20) {
+                  if (countDown.getCount() == 1000 || countDown.getCount() == 2000) {
                     try {
-                      terminateHServerWithLogs(0, xs.get((int) (countDown.getCount() / 10)));
+                      terminateHServerWithLogs(0, xs.get((int) (countDown.getCount() / 1000)));
                     } catch (Exception e) {
-                      throw new RuntimeException(e);
+                      e.printStackTrace();
+                      logger.error(e.getMessage());
+                      Assertions.fail();
                     }
                   }
                 })
             .build();
 
     consumer.startAsync().awaitRunning();
-    countDown.await(20, TimeUnit.SECONDS);
+    Assertions.assertTrue(countDown.await(45, TimeUnit.SECONDS));
     consumer.stopAsync().awaitTerminated();
 
-    Assertions.assertEquals(recordIds0, recordIds1);
+    Assertions.assertEquals(new HashSet<>(recordIds0), recordIds1);
   }
 
   @Test
@@ -348,7 +351,7 @@ public class ClusterKillNodeTest {
                 })
             .build();
     consumer1.startAsync().awaitRunning();
-    countDownLatch1.await(20, TimeUnit.SECONDS);
+    Assertions.assertTrue(countDownLatch1.await(20, TimeUnit.SECONDS));
     consumer1.stopAsync().awaitTerminated();
 
     List<Integer> serverIds =
@@ -376,5 +379,69 @@ public class ClusterKillNodeTest {
 
     Assertions.assertEquals(recordIds, recordIds1);
     Assertions.assertEquals(recordIds, recordIds2);
+  }
+
+  @Test
+  @Timeout(150)
+  void testKillAllNodesThenRestartOneShouldConsumeAll() throws Exception {
+    final String stream = randStream(hStreamClient);
+    final String subscription = randSubscription(hStreamClient, stream);
+    final int msgCnt = 5000;
+
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+    Set<RecordId> recs0 = new HashSet<>(doProduceReturnId(producer, 1, msgCnt));
+    Set<RecordId> recs1 = new HashSet<>();
+    CountDownLatch countDown0 = new CountDownLatch(msgCnt / 2);
+
+    Consumer consumer0 =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("consumer0")
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  if (countDown0.getCount() <= msgCnt / 2) {
+                    if (recs1.add(recs.getRecordId())) {
+                      countDown0.countDown();
+                    }
+                    recv.ack();
+                  }
+                })
+            .build();
+
+    consumer0.startAsync().awaitRunning();
+    Assertions.assertTrue(countDown0.await(20, TimeUnit.SECONDS));
+    consumer0.stopAsync().awaitTerminated();
+
+    terminateHServerWithLogs(0, 0);
+    terminateHServerWithLogs(0, 1);
+    terminateHServerWithLogs(0, 2);
+    Thread.sleep(5 * 1000);
+    hServers.get(2).start();
+    Thread.sleep(1000);
+    Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
+
+    CountDownLatch countDown1 = new CountDownLatch(msgCnt - recs1.size());
+    Consumer consumer1 =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("consumer1")
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  if (recs1.add(recs.getRecordId())) {
+                    countDown1.countDown();
+                    logger.debug("current size is {}", recs1.size());
+                  } else {
+                    logger.debug("dup rec");
+                  }
+                  recv.ack();
+                })
+            .build();
+    consumer1.startAsync().awaitRunning();
+    Assertions.assertTrue(countDown1.await(90, TimeUnit.SECONDS));
+    consumer1.stopAsync().awaitTerminated();
+
+    Assertions.assertEquals(recs0, recs1);
   }
 }
