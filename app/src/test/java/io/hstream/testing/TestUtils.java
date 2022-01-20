@@ -11,6 +11,7 @@ import io.hstream.SubscriptionOffset.SpecialOffset;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -21,7 +22,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -37,10 +37,14 @@ import org.testcontainers.utility.DockerImageName;
 
 public class TestUtils {
 
-  private static Logger logger = LoggerFactory.getLogger(TestUtils.class);
+  private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
 
   public static String randText() {
     return UUID.randomUUID().toString().replace("-", "");
+  }
+
+  public static byte[] randBytes() {
+    return UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8);
   }
 
   public static String randStream(HStreamClient c) {
@@ -273,25 +277,6 @@ public class TestUtils {
       xs[i] = producer.write(rRec);
     }
     CompletableFuture.allOf(xs).join();
-    return records;
-  }
-
-  public static ArrayList<RecordId> doProduceReturnId(
-      Producer producer, int payloadSize, int recordsNums)
-      throws ExecutionException, InterruptedException {
-    Random rand = new Random();
-    byte[] rRec = new byte[payloadSize];
-    var records = new ArrayList<RecordId>();
-    var xs = new CompletableFuture<?>[recordsNums];
-    for (int i = 0; i < recordsNums; i++) {
-      rand.nextBytes(rRec);
-      xs[i] = producer.write(rRec);
-    }
-    CompletableFuture.allOf(xs).join();
-    for (var x : xs) {
-      records.add((RecordId) x.get());
-    }
-    Assertions.assertEquals(recordsNums, records.size());
     return records;
   }
 

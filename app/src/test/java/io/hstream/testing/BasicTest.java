@@ -5,6 +5,7 @@ import static io.hstream.testing.TestUtils.createConsumerCollectStringPayload;
 import static io.hstream.testing.TestUtils.createConsumerWithFixNumsRecords;
 import static io.hstream.testing.TestUtils.doProduce;
 import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
+import static io.hstream.testing.TestUtils.randBytes;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
 import static io.hstream.testing.TestUtils.randSubscriptionFromEarliest;
@@ -23,7 +24,6 @@ import io.hstream.Responder;
 import io.hstream.Stream;
 import io.hstream.Subscription;
 import io.hstream.SubscriptionOffset;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1299,16 +1299,12 @@ class BasicTest {
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
 
-    RecordId id0 =
-        producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join();
-    RecordId id1 =
-        producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join();
+    RecordId id0 = producer.write(randBytes()).join();
+    RecordId id1 = producer.write(randBytes()).join();
     Assertions.assertTrue(id0.compareTo(id1) < 0);
 
     hStreamClient.deleteStream(stream);
-    Assertions.assertThrows(
-        Exception.class,
-        () -> producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+    Assertions.assertThrows(Exception.class, () -> producer.write(randBytes()).join());
   }
 
   @Test
@@ -1361,7 +1357,7 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void createDeleteStreamFromNodes() throws Exception {
+  void createThenDeleteStreamFromDifferentServerUrl() throws Exception {
     ArrayList<HStreamClient> clients = new ArrayList<>();
     for (String hServerUrl : hServerUrls) {
       clients.add(HStreamClient.builder().serviceUrl(hServerUrl).build());
@@ -1409,7 +1405,7 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void testWriteRawReadFromNodes() throws Exception {
+  void testWriteRawThenReadFromDifferentServerUrl() throws Exception {
     Random rand = new Random();
     byte[] randRecs = new byte[128];
     rand.nextBytes(randRecs);
@@ -1437,42 +1433,5 @@ class BasicTest {
 
     consumer.startAsync().awaitRunning(5, TimeUnit.SECONDS);
     consumer.stopAsync().awaitTerminated();
-  }
-
-  @Test
-  @Timeout(60)
-  void testWriteFromNodesSeq() throws Exception {
-    Random rand = new Random();
-    byte[] randBytes = new byte[128];
-    final String stream = randStream(hStreamClient);
-
-    for (String hServerUrl : hServerUrls) {
-      HStreamClient c = HStreamClient.builder().serviceUrl(hServerUrl).build();
-      rand.nextBytes(randBytes);
-      Producer producer = c.newProducer().stream(stream).build();
-      producer.write(randBytes);
-    }
-
-    ArrayList<RecordId> recIds = new ArrayList<>();
-
-    String subscription = randSubscription(hStreamClient, stream);
-    Consumer consumer =
-        hStreamClient
-            .newConsumer()
-            .name("test-newConsumer-" + UUID.randomUUID())
-            .subscription(subscription)
-            .rawRecordReceiver(
-                (recs, recv) -> {
-                  recIds.add(recs.getRecordId());
-                  recv.ack();
-                })
-            .build();
-
-    consumer.startAsync().awaitRunning(20, TimeUnit.SECONDS);
-    consumer.stopAsync().awaitTerminated();
-
-    ArrayList<RecordId> recIdsSeq = new ArrayList<>(recIds);
-    recIdsSeq = (ArrayList<RecordId>) recIdsSeq.stream().sorted().collect(Collectors.toList());
-    Assertions.assertEquals(recIdsSeq, recIds);
   }
 }
