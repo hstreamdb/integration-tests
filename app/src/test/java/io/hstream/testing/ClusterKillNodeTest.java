@@ -4,7 +4,6 @@ import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
 import static io.hstream.testing.TestUtils.randBytes;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.restartServer;
 import static io.hstream.testing.TestUtils.writeLog;
 
 import io.hstream.Consumer;
@@ -253,85 +252,15 @@ public class ClusterKillNodeTest {
   }
 
   @Test
-  @Timeout(90)
-  void testWriteAfterKillNodes() throws Exception {
-    terminateHServerWithLogs(0, 1);
-    Thread.sleep(5 * 1000);
-    terminateHServerWithLogs(0, 2);
-    Thread.sleep(5 * 1000);
-    String stream = randStream(hStreamClient);
-
-    restartServer(hServers.get(1));
-    Assertions.assertTrue(hServers.get(1).isRunning());
-    Assertions.assertNotNull(hServers.get(1).getLogs());
-    Thread.sleep(5 * 1000);
-    Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
-    terminateHServerWithLogs(0, 0);
-    Thread.sleep(5 * 1000);
-    Assertions.assertFalse(hServers.get(0).isRunning());
-    Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
-    String subscription = randSubscription(hStreamClient, stream);
-
-    restartServer(hServers.get(2));
-    Thread.sleep(5 * 1000);
-    Assertions.assertTrue(hServers.get(2).isRunning());
-    Assertions.assertNotNull(hServers.get(2).getLogs());
-    Assertions.assertEquals(
-        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
-    terminateHServerWithLogs(1, 1);
-    Thread.sleep(5 * 1000);
-    Assertions.assertFalse(hServers.get(1).isRunning());
-    hStreamClient.close();
-    hStreamClient = HStreamClient.builder().serviceUrl("127.0.0.1:6572").build();
-    Assertions.assertEquals(
-        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
-    Producer producer = hStreamClient.newProducer().stream(stream).build();
-
-    restartServer(hServers.get(0));
-    Thread.sleep(5 * 1000);
-    Assertions.assertTrue(hServers.get(0).isRunning());
-    Assertions.assertNotNull(hServers.get(0).getLogs());
-    ArrayList<RecordId> recordIds0 = new ArrayList<>();
-    recordIds0.add(producer.write(randBytes()).join());
-    recordIds0.add(producer.write(randBytes()).join());
-
-    terminateHServerWithLogs(1, 2);
-    Thread.sleep(5 * 1000);
-    Assertions.assertFalse(hServers.get(2).isRunning());
-    recordIds0.add(producer.write(randBytes()).join());
-    recordIds0.add(producer.write(randBytes()).join());
-
-    ArrayList<RecordId> recordIds1 = new ArrayList<>(recordIds0);
-    recordIds1.sort(RecordId::compareTo);
-    Assertions.assertEquals(recordIds0, recordIds1);
-  }
-
-  @Test
   @Timeout(60)
   void testJoinConsumerGroupBeforeAndAfterKillNodes() throws Exception {
     String stream = randStream(hStreamClient);
     String subscription = randSubscription(hStreamClient, stream);
-    ArrayList<RecordId> recordIds = new ArrayList<>();
+    Set<RecordId> recordIds0 = new HashSet<>();
     Producer producer = hStreamClient.newProducer().stream(stream).build();
     for (int i = 0; i < 32; ++i) {
-      recordIds.add(producer.write(randBytes()).join());
+      recordIds0.add(producer.write(randBytes()).join());
     }
-
-    ArrayList<RecordId> recordIds1 = new ArrayList<>();
-    CountDownLatch countDownLatch1 = new CountDownLatch(32);
-    Consumer consumer1 =
-        hStreamClient
-            .newConsumer()
-            .subscription(subscription)
-            .rawRecordReceiver(
-                (recs, recv) -> {
-                  recordIds1.add(recs.getRecordId());
-                  countDownLatch1.countDown();
-                })
-            .build();
-    consumer1.startAsync().awaitRunning();
-    Assertions.assertTrue(countDownLatch1.await(20, TimeUnit.SECONDS));
-    consumer1.stopAsync().awaitTerminated();
 
     List<Integer> serverIds =
         Arrays.stream(new int[] {0, 1, 2}).boxed().collect(Collectors.toList());
@@ -340,24 +269,24 @@ public class ClusterKillNodeTest {
     terminateHServerWithLogs(0, serverIds.get(1));
     Thread.sleep(2000);
 
-    ArrayList<RecordId> recordIds2 = new ArrayList<>();
-    CountDownLatch countDownLatch2 = new CountDownLatch(32);
-    Consumer consumer2 =
+    Set<RecordId> recordIds1 = new HashSet<>();
+    CountDownLatch countDownLatch = new CountDownLatch(32);
+    Consumer consumer =
         hStreamClient
             .newConsumer()
             .subscription(subscription)
             .rawRecordReceiver(
                 (recs, recv) -> {
-                  recordIds2.add(recs.getRecordId());
-                  countDownLatch2.countDown();
+                  if (recordIds1.add(recs.getRecordId())) {
+                    recv.ack();
+                    countDownLatch.countDown();
+                  }
                 })
             .build();
-    consumer2.startAsync().awaitRunning();
-    countDownLatch2.await(20, TimeUnit.SECONDS);
-    consumer2.stopAsync().awaitTerminated();
-
-    Assertions.assertEquals(recordIds, recordIds1);
-    Assertions.assertEquals(recordIds, recordIds2);
+    consumer.startAsync().awaitRunning();
+    Assertions.assertTrue(countDownLatch.await(20, TimeUnit.SECONDS));
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertEquals(recordIds0, recordIds1);
   }
 
   @Test
@@ -365,7 +294,7 @@ public class ClusterKillNodeTest {
   void testKillAllNodesThenRestartOneShouldConsumeAll() throws Exception {
     final String stream = randStream(hStreamClient);
     final String subscription = randSubscription(hStreamClient, stream);
-    final int msgCnt = 5000;
+    final int msgCnt = 2000;
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
     Set<RecordId> recs0 = new HashSet<>(doProduceAndGatherRid(producer, 1, msgCnt));
