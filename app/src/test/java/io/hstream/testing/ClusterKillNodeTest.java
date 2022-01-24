@@ -87,7 +87,7 @@ public class ClusterKillNodeTest {
 
   @Test
   @Timeout(60)
-  void listStreamAfterKillNodes() {
+  void testListStreamAfterKillNodes() {
     String stream = randStream(hStreamClient);
     hServers.get(0).close();
     hServers.get(1).close();
@@ -112,17 +112,6 @@ public class ClusterKillNodeTest {
       terminateHServerWithLogs(0, i);
     }
     Assertions.assertThrows(Exception.class, hStreamClient::listStreams);
-  }
-
-  @Test
-  @Timeout(60)
-  void listSubscriptionAfterKillNodes() {
-    String stream = randStream(hStreamClient);
-    String subscription = randSubscription(hStreamClient, stream);
-    hServers.get(0).close();
-    hServers.get(1).close();
-    Assertions.assertEquals(
-        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
   }
 
   @RepeatedTest(5)
