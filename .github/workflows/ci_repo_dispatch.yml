@@ -27,7 +27,12 @@ jobs:
           distribution: ${{ matrix.distribution }}
           java-version: ${{ matrix.java-version }}
       - uses: gradle/wrapper-validation-action@v1
-      - run: ./gradlew build
+
+      - run: |
+          if [ "${{ github.event.client_payload.image }}" != '' ]
+            then HSTREAM_IMAGE_NAME="${{ github.event.client_payload.image }}"
+          fi
+          ./gradlew build
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}

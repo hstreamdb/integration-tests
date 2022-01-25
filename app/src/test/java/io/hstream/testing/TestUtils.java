@@ -38,6 +38,8 @@ import org.testcontainers.utility.DockerImageName;
 public class TestUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
+  private static final DockerImageName defaultHstreamImageName =
+      DockerImageName.parse("hstreamdb/hstream:latest");
 
   public static String randText() {
     return UUID.randomUUID().toString().replace("-", "");
@@ -92,9 +94,20 @@ public class TestUtils {
     return new GenericContainer<>(DockerImageName.parse("zookeeper")).withNetworkMode("host");
   }
 
+  private static DockerImageName getHstreamImageName() {
+    String hstreamImageName = System.getenv("HSTREAM_IMAGE_NAME");
+    if (hstreamImageName == null || hstreamImageName.equals("")) {
+      logger.info(
+          "No env variable HSTREAM_IMAGE_NAME found, use default name {}", defaultHstreamImageName);
+      return defaultHstreamImageName;
+    } else {
+      logger.info("Found env variable HSTREAM_IMAGE_NAME = {}", hstreamImageName);
+      return DockerImageName.parse(hstreamImageName);
+    }
+  }
+
   public static GenericContainer<?> makeHStore(Path dataDir) {
-    return new GenericContainer<>(DockerImageName.parse("hstreamdb/hstream:latest"))
-        // .withImagePullPolicy(PullPolicy.alwaysPull())
+    return new GenericContainer<>(getHstreamImageName())
         .withNetworkMode("host")
         .withFileSystemBind(
             dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_WRITE)
@@ -106,7 +119,6 @@ public class TestUtils {
                 + "--use-tcp "
                 + "--tcp-host "
                 + "127.0.0.1 "
-                // + "$(hostname -I | cut -f1 -d' ') "
                 + "--user-admin-port 6440 "
                 + "--no-interactive")
         .waitingFor(Wait.forLogMessage(".*LogDevice Cluster running.*", 1));
@@ -120,8 +132,7 @@ public class TestUtils {
       String zkHost,
       String hstoreHost,
       int serverId) {
-    return new GenericContainer<>(DockerImageName.parse("hstreamdb/hstream:latest"))
-        // .withImagePullPolicy(PullPolicy.alwaysPull())
+    return new GenericContainer<>(getHstreamImageName())
         .withNetworkMode("host")
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
         .withCommand(
@@ -160,7 +171,7 @@ public class TestUtils {
     String testClassName = context.getRequiredTestClass().getSimpleName();
     String testName = context.getTestMethod().get().getName();
     String fileName = "../.logs/" + testClassName + "/" + testName + "/" + grp + "/" + entryName;
-    logger.debug("log to " + fileName);
+    logger.info("log to " + fileName);
 
     File file = new File(fileName);
     file.getParentFile().mkdirs();
