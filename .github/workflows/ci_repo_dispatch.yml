@@ -26,6 +26,7 @@ jobs:
         with:
           distribution: ${{ matrix.distribution }}
           java-version: ${{ matrix.java-version }}
+          cache: 'gradle'
       - uses: gradle/wrapper-validation-action@v1
 
       - run: |
