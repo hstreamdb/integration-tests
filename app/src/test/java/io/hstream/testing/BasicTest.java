@@ -58,7 +58,7 @@ import org.testcontainers.containers.GenericContainer;
 @ExtendWith(ClusterExtension.class)
 class BasicTest {
 
-  private static Logger logger = LoggerFactory.getLogger(BasicTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(BasicTest.class);
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
   private List<GenericContainer<?>> hServers;
@@ -1409,15 +1409,21 @@ class BasicTest {
     Random rand = new Random();
     byte[] randRecs = new byte[128];
     rand.nextBytes(randRecs);
+    final int total = 64;
 
     HStreamClient hStreamClient1 = HStreamClient.builder().serviceUrl(hServerUrls.get(1)).build();
     String stream = randStream(hStreamClient1);
     hStreamClient1.close();
 
-    Producer producer = hStreamClient.newProducer().stream(stream).build();
-    producer.write(randRecs);
-
+    Set<RecordId> recordIds0 = new HashSet<>();
     String subscription = randSubscription(hStreamClient, stream);
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+    for (int i = 0; i < total; ++i) {
+      recordIds0.add(producer.write(randRecs).join());
+    }
+
+    Set<RecordId> recordIds1 = new HashSet<>();
+    CountDownLatch countDown = new CountDownLatch(total);
     HStreamClient hStreamClient2 = HStreamClient.builder().serviceUrl(hServerUrls.get(2)).build();
     Consumer consumer =
         hStreamClient2
@@ -1426,12 +1432,18 @@ class BasicTest {
             .subscription(subscription)
             .rawRecordReceiver(
                 (recs, receiver) -> {
-                  Assertions.assertEquals(randRecs, recs.getRawRecord());
+                  if (recordIds1.add(recs.getRecordId())) {
+                    countDown.countDown();
+                  }
+                  logger.debug("read, size = {}", recordIds1.size());
                   receiver.ack();
                 })
             .build();
 
-    consumer.startAsync().awaitRunning(5, TimeUnit.SECONDS);
+    Assertions.assertEquals(total, recordIds0.size());
+    consumer.startAsync().awaitRunning();
+    Assertions.assertTrue(countDown.await(20, TimeUnit.SECONDS));
     consumer.stopAsync().awaitTerminated();
+    Assertions.assertEquals(recordIds0, recordIds1);
   }
 }

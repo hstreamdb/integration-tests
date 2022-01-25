@@ -306,6 +306,7 @@ public class TestUtils {
   }
 
   public static void restartServer(GenericContainer<?> server) throws Exception {
+    Thread.sleep(1000);
     server.close();
     Thread.sleep(5000); // need time to let zk clear old data
     logger.info("begin restart!");
@@ -317,6 +318,7 @@ public class TestUtils {
       server.close();
       Thread.sleep(5000);
       server.withStartupTimeout(Duration.ofSeconds(5)).start();
+      Thread.sleep(2000);
     }
   }
 
