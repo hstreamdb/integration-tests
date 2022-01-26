@@ -24,9 +24,11 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
   private GenericContainer<?> hserver;
+  private long beginTime;
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
+    beginTime = System.currentTimeMillis();
     printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
@@ -77,6 +79,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     zk = null;
     dataDir = null;
 
+    logger.info("total time is = {}ms", System.currentTimeMillis() - beginTime);
     printEndFlag(context);
   }
 }

@@ -29,9 +29,12 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
   private String grp;
+  private long beginTime;
 
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
+    beginTime = System.currentTimeMillis();
+
     grp = UUID.randomUUID().toString();
     printBeginFlag(context);
 
@@ -98,6 +101,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     writeLog(context, "zk", grp, zk.getLogs());
     zk.close();
 
+    logger.info("total time is = {}ms", System.currentTimeMillis() - beginTime);
     printEndFlag(context);
   }
 }
