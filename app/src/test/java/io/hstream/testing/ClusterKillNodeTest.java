@@ -206,7 +206,7 @@ public class ClusterKillNodeTest {
             .build();
 
     consumer.startAsync().awaitRunning();
-    Assertions.assertTrue(countDown.await(45, TimeUnit.SECONDS));
+    Assertions.assertTrue(countDown.await(60, TimeUnit.SECONDS));
     consumer.stopAsync().awaitTerminated();
 
     Assertions.assertNull(e.get());
