@@ -202,6 +202,7 @@ public class ScaleTest {
   void testLargeNumSubscription() throws Exception {
     final String stream = randStream(hStreamClient);
     final int total = 64;
+    final int msgCntForEachCase = total * 2;
 
     String[] subscriptions = new String[total];
     for (int i = 0; i < total; ++i) {
@@ -210,7 +211,7 @@ public class ScaleTest {
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
     List<RecordId> recordIds0 = new ArrayList<>();
-    for (int i = 0; i < total * 2; ++i) {
+    for (int i = 0; i < msgCntForEachCase; ++i) {
       recordIds0.add(
           producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
     }
@@ -222,7 +223,7 @@ public class ScaleTest {
           new Thread(
               () -> {
                 List<RecordId> recordIds1 = new ArrayList<>();
-                CountDownLatch countDown = new CountDownLatch(total * 2);
+                CountDownLatch countDown = new CountDownLatch(msgCntForEachCase);
                 Consumer consumer =
                     hStreamClient
                         .newConsumer()
