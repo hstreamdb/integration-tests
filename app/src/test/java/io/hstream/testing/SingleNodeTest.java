@@ -6,9 +6,9 @@ import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscriptionFromEarliest;
 import static io.hstream.testing.TestUtils.restartServer;
 
+import io.hstream.BufferedProducer;
 import io.hstream.Consumer;
 import io.hstream.HStreamClient;
-import io.hstream.Producer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -71,9 +71,10 @@ class SingleNodeTest {
   @Timeout(60)
   void testReconsumeAfterRestartServer() throws Exception {
     final String streamName = randStream(hStreamClient);
-    Producer producer =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
+    BufferedProducer producer =
+        hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(100).build();
     var records = doProduce(producer, 128, 100);
+    producer.close();
     CountDownLatch notify = new CountDownLatch(records.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
     List<String> res = new ArrayList<>();
@@ -107,9 +108,10 @@ class SingleNodeTest {
   @Timeout(60)
   void testConsumeAfterRestartServer() throws Exception {
     final String streamName = randStream(hStreamClient);
-    Producer producer =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(100).build();
+    BufferedProducer producer =
+        hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(100).build();
     var records = doProduce(producer, 128, 100);
+    producer.close();
 
     CountDownLatch notify = new CountDownLatch(records.size());
     final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
@@ -127,9 +129,10 @@ class SingleNodeTest {
     restartServer(server);
     res.clear();
 
-    Producer producer2 =
-        hStreamClient.newProducer().stream(streamName).enableBatch().recordCountLimit(10).build();
+    BufferedProducer producer2 =
+        hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(10).build();
     records = doProduce(producer2, 1, 10);
+    producer2.close();
     CountDownLatch notify2 = new CountDownLatch(records.size());
     Consumer consumer2 =
         createConsumerCollectStringPayload(
