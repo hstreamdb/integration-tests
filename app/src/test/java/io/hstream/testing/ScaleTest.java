@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -145,56 +144,65 @@ public class ScaleTest {
     final int total = 64;
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
-    List<RecordId> recordIds0 = new ArrayList<>();
+    Set<RecordId> recordIds0 = new HashSet<>();
     for (int i = 0; i < total; ++i) {
       recordIds0.add(
           producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
     }
 
-    AtomicReference<Throwable> err = new AtomicReference<>();
-    err.set(null);
+    Thread cur = Thread.currentThread();
+
+    Set<RecordId> recordIds1 = new HashSet<>();
+    ReentrantLock lock = new ReentrantLock();
+    CountDownLatch countDown = new CountDownLatch(total);
+
     List<Thread> threads = new ArrayList<>();
     for (int i = 0; i < total; ++i) {
       Thread thread =
           new Thread(
               () -> {
-                Set<RecordId> recordIds1 = new HashSet<>();
-                CountDownLatch countDown = new CountDownLatch(total);
+                Thread.setDefaultUncaughtExceptionHandler(
+                    (t, e) -> {
+                      logger.info("===FATAL");
+                      logger.info("thread {} handles {}", t, e);
+                      e.printStackTrace();
+                      cur.interrupt();
+                    });
+
                 Consumer consumer =
                     hStreamClient
                         .newConsumer()
                         .subscription(subscription)
                         .rawRecordReceiver(
                             (recs, recv) -> {
+                              lock.lock();
                               if (recordIds1.add(recs.getRecordId())) {
                                 countDown.countDown();
                               }
+                              lock.unlock();
+
+                              recv.ack();
                             })
                         .build();
+
                 consumer.startAsync().awaitRunning();
+
                 try {
-                  Assertions.assertTrue(countDown.await(60, TimeUnit.SECONDS));
-                } catch (Throwable e) {
-                  if (err.get() != null) {
-                    err.set(e);
-                  }
+                  Assertions.assertTrue(countDown.await(90, TimeUnit.SECONDS));
+                } catch (InterruptedException e) {
+                  throw new RuntimeException(e);
                 }
+
                 consumer.stopAsync().awaitTerminated();
-                try {
-                  Assertions.assertEquals(new HashSet<>(recordIds0), recordIds1);
-                } catch (Throwable e) {
-                  if (err.get() != null) {
-                    err.set(e);
-                  }
-                }
               });
       thread.start();
       threads.add(thread);
     }
+    Assertions.assertTrue(countDown.await(90, TimeUnit.SECONDS));
     for (var x : threads) {
-      x.join();
+      x.join(10);
     }
-    Assertions.assertNull(err.get());
+    Assertions.assertEquals(recordIds0, recordIds1);
   }
 
   @Test
