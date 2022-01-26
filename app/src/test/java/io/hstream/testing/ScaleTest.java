@@ -1,6 +1,7 @@
 package io.hstream.testing;
 
 import static io.hstream.testing.TestUtils.doProduce;
+import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
 import static io.hstream.testing.TestUtils.randBytes;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
@@ -141,66 +142,40 @@ public class ScaleTest {
   void testLargeNumConsumer() throws Exception {
     final String stream = randStream(hStreamClient);
     final String subscription = randSubscription(hStreamClient, stream);
-    final int total = 64;
+    final int total = 128;
+    final int totalMsgCnt = total * 4;
 
     Producer producer = hStreamClient.newProducer().stream(stream).build();
-    Set<RecordId> recordIds0 = new HashSet<>();
-    for (int i = 0; i < total; ++i) {
-      recordIds0.add(
-          producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
-    }
+    Set<RecordId> recordIds0 = new HashSet<>(doProduceAndGatherRid(producer, 1, totalMsgCnt));
 
     Thread cur = Thread.currentThread();
 
     Set<RecordId> recordIds1 = new HashSet<>();
     ReentrantLock lock = new ReentrantLock();
-    CountDownLatch countDown = new CountDownLatch(total);
+    CountDownLatch countDown = new CountDownLatch(totalMsgCnt);
 
-    List<Thread> threads = new ArrayList<>();
+    List<Consumer> consumerGroup = new ArrayList<>();
     for (int i = 0; i < total; ++i) {
-      Thread thread =
-          new Thread(
-              () -> {
-                Thread.setDefaultUncaughtExceptionHandler(
-                    (t, e) -> {
-                      logger.info("===FATAL");
-                      logger.info("thread {} handles {}", t, e);
-                      e.printStackTrace();
-                      cur.interrupt();
-                    });
-
-                Consumer consumer =
-                    hStreamClient
-                        .newConsumer()
-                        .subscription(subscription)
-                        .rawRecordReceiver(
-                            (recs, recv) -> {
-                              lock.lock();
-                              if (recordIds1.add(recs.getRecordId())) {
-                                countDown.countDown();
-                              }
-                              lock.unlock();
-
-                              recv.ack();
-                            })
-                        .build();
-
-                consumer.startAsync().awaitRunning();
-
-                try {
-                  Assertions.assertTrue(countDown.await(90, TimeUnit.SECONDS));
-                } catch (InterruptedException e) {
-                  throw new RuntimeException(e);
-                }
-
-                consumer.stopAsync().awaitTerminated();
-              });
-      thread.start();
-      threads.add(thread);
+      Consumer consumer =
+          hStreamClient
+              .newConsumer()
+              .subscription(subscription)
+              .rawRecordReceiver(
+                  (recs, recv) -> {
+                    lock.lock();
+                    if (recordIds1.add(recs.getRecordId())) {
+                      countDown.countDown();
+                    }
+                    lock.unlock();
+                    recv.ack();
+                  })
+              .build();
+      consumer.startAsync().awaitRunning();
+      consumerGroup.add(consumer);
     }
     Assertions.assertTrue(countDown.await(90, TimeUnit.SECONDS));
-    for (var x : threads) {
-      x.join(10);
+    for (var x : consumerGroup) {
+      x.stopAsync().awaitTerminated();
     }
     Assertions.assertEquals(recordIds0, recordIds1);
   }
