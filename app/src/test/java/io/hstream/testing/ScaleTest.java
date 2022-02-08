@@ -2,22 +2,21 @@ package io.hstream.testing;
 
 import static io.hstream.testing.TestUtils.doProduce;
 import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
-import static io.hstream.testing.TestUtils.randBytes;
+import static io.hstream.testing.TestUtils.randRawRec;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
 
+import io.hstream.BufferedProducer;
 import io.hstream.Consumer;
 import io.hstream.HStreamClient;
 import io.hstream.Producer;
 import io.hstream.RecordId;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -97,11 +96,11 @@ public class ScaleTest {
                 for (int j = 0; j < total; ++j) {
                   lock.lock();
                   try {
-                    recordIds0.add(producer.write(randBytes()).join());
+                    recordIds0.add(producer.write(randRawRec()).join());
                   } catch (Throwable e) {
                     logger.info("========e {}", e.getMessage());
                     e.printStackTrace();
-                    recordIds0.add(producer.write(randBytes()).join());
+                    recordIds0.add(producer.write(randRawRec()).join());
                   }
                   lock.unlock();
                 }
@@ -195,8 +194,7 @@ public class ScaleTest {
     Producer producer = hStreamClient.newProducer().stream(stream).build();
     List<RecordId> recordIds0 = new ArrayList<>();
     for (int i = 0; i < msgCntForEachCase; ++i) {
-      recordIds0.add(
-          producer.write(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)).join());
+      recordIds0.add(producer.write(randRawRec()).join());
     }
 
     List<Thread> threads = new ArrayList<>();
@@ -242,12 +240,10 @@ public class ScaleTest {
     final String subscription = randSubscription(hStreamClient, stream);
     final int batchSize = 512;
 
-    Producer producer =
-        hStreamClient.newProducer().stream(stream)
-            .enableBatch()
-            .recordCountLimit(batchSize)
-            .build();
+    BufferedProducer producer =
+        hStreamClient.newBufferedProducer().stream(stream).recordCountLimit(batchSize).build();
     List<String> recs0 = doProduce(producer, 4, 2048);
+    producer.close();
 
     CountDownLatch countDown = new CountDownLatch(2048);
     List<String> recs1 = new ArrayList<>();

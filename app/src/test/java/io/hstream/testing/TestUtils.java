@@ -1,13 +1,13 @@
 package io.hstream.testing;
 
 import io.hstream.Consumer;
+import io.hstream.HRecord;
 import io.hstream.HStreamClient;
 import io.hstream.Producer;
 import io.hstream.ReceivedRawRecord;
+import io.hstream.Record;
 import io.hstream.RecordId;
 import io.hstream.Subscription;
-import io.hstream.SubscriptionOffset;
-import io.hstream.SubscriptionOffset.SpecialOffset;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -49,22 +49,22 @@ public class TestUtils {
     return UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8);
   }
 
+  public static Record randRawRec() {
+    return Record.newBuilder().rawRecord(randBytes()).build();
+  }
+
+  public static Record buildRecord(byte[] xs) {
+    return Record.newBuilder().rawRecord(xs).build();
+  }
+
+  public static Record buildRecord(HRecord xs) {
+    return Record.newBuilder().hRecord(xs).build();
+  }
+
   public static String randStream(HStreamClient c) {
     String streamName = "test_stream_" + randText();
     c.createStream(streamName, (short) 3);
     return streamName;
-  }
-
-  public static String randSubscriptionWithOffset(
-      HStreamClient c, String streamName, SubscriptionOffset offset) {
-    String subscriptionName = "test_subscription_" + randText();
-    Subscription subscription =
-        Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
-            .offset(offset)
-            .ackTimeoutSeconds(5)
-            .build();
-    c.createSubscription(subscription);
-    return subscriptionName;
   }
 
   public static String randSubscriptionWithTimeout(
@@ -72,7 +72,6 @@ public class TestUtils {
     String subscriptionName = "test_subscription_" + randText();
     Subscription subscription =
         Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
-            .offset(new SubscriptionOffset(SpecialOffset.EARLIEST))
             .ackTimeoutSeconds(timeout)
             .build();
     c.createSubscription(subscription);
@@ -80,12 +79,11 @@ public class TestUtils {
   }
 
   public static String randSubscription(HStreamClient c, String streamName) {
-    return randSubscriptionWithOffset(c, streamName, new SubscriptionOffset(SpecialOffset.LATEST));
-  }
-
-  public static String randSubscriptionFromEarliest(HStreamClient c, String streamName) {
-    return randSubscriptionWithOffset(
-        c, streamName, new SubscriptionOffset(SpecialOffset.EARLIEST));
+    final String subscriptionName = "test_subscription_" + randText();
+    Subscription subscription =
+        Subscription.newBuilder().subscription(subscriptionName).stream(streamName).build();
+    c.createSubscription(subscription);
+    return subscriptionName;
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -199,9 +197,12 @@ public class TestUtils {
   }
 
   public static void assertRecordIdsAscending(List<ReceivedRawRecord> input) {
-    Assertions.assertTrue(
-        isAscending(
-            input.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList())));
+    if (!input.isEmpty()) {
+      Assertions.assertTrue(
+          isAscending(
+              input.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList())),
+          "is not ascending");
+    }
   }
 
   public static Consumer createConsumer(
@@ -285,9 +286,10 @@ public class TestUtils {
     for (int i = 0; i < recordsNums; i++) {
       rand.nextBytes(rRec);
       records.add(Arrays.toString(rRec));
-      xs[i] = producer.write(rRec);
+      xs[i] = producer.write(Record.newBuilder().rawRecord(rRec).build());
     }
     CompletableFuture.allOf(xs).join();
+    Assertions.assertEquals(recordsNums, records.size());
     return records;
   }
 
@@ -299,9 +301,10 @@ public class TestUtils {
     var writes = new ArrayList<CompletableFuture<RecordId>>();
     for (int i = 0; i < recordsNums; i++) {
       rand.nextBytes(rRec);
-      writes.add(producer.write(rRec));
+      writes.add(producer.write(Record.newBuilder().rawRecord(rRec).build()));
     }
     writes.forEach(w -> rids.add(w.join()));
+    Assertions.assertEquals(recordsNums, rids.size());
     return rids;
   }
 

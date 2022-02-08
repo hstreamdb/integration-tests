@@ -22,7 +22,7 @@ import org.testcontainers.containers.GenericContainer;
 public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
   static final int CLUSTER_SIZE = 3;
-  private static Logger logger = LoggerFactory.getLogger(ClusterExtension.class);
+  private static final Logger logger = LoggerFactory.getLogger(ClusterExtension.class);
   private final List<GenericContainer<?>> hServers = new ArrayList<>(CLUSTER_SIZE);
   private final List<String> hServerUrls = new ArrayList<>(CLUSTER_SIZE);
   private Path dataDir;

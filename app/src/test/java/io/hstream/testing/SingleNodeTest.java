@@ -3,7 +3,7 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.createConsumerCollectStringPayload;
 import static io.hstream.testing.TestUtils.doProduce;
 import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscriptionFromEarliest;
+import static io.hstream.testing.TestUtils.randSubscription;
 import static io.hstream.testing.TestUtils.restartServer;
 
 import io.hstream.BufferedProducer;
@@ -58,7 +58,7 @@ class SingleNodeTest {
   @Timeout(60)
   void testGetResourceAfterRestartServer() throws Exception {
     final String streamName = randStream(hStreamClient);
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    final String subscription = randSubscription(hStreamClient, streamName);
     restartServer(server);
     var streams = hStreamClient.listStreams();
     Assertions.assertEquals(streamName, streams.get(0).getStreamName());
@@ -76,7 +76,7 @@ class SingleNodeTest {
     var records = doProduce(producer, 128, 100);
     producer.close();
     CountDownLatch notify = new CountDownLatch(records.size());
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    final String subscription = randSubscription(hStreamClient, streamName);
     List<String> res = new ArrayList<>();
     var lock = new ReentrantLock();
     Consumer consumer =
@@ -92,7 +92,7 @@ class SingleNodeTest {
     res.clear();
     CountDownLatch notify2 = new CountDownLatch(records.size());
 
-    final String subscription1 = randSubscriptionFromEarliest(hStreamClient, streamName);
+    final String subscription1 = randSubscription(hStreamClient, streamName);
     Consumer consumer2 =
         createConsumerCollectStringPayload(
             hStreamClient, subscription1, "test-consumer", res, notify2, lock);
@@ -114,7 +114,7 @@ class SingleNodeTest {
     producer.close();
 
     CountDownLatch notify = new CountDownLatch(records.size());
-    final String subscription = randSubscriptionFromEarliest(hStreamClient, streamName);
+    final String subscription = randSubscription(hStreamClient, streamName);
     List<String> res = new ArrayList<>();
     var lock = new ReentrantLock();
     Consumer consumer =

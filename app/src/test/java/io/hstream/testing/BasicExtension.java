@@ -19,7 +19,7 @@ import org.testcontainers.containers.GenericContainer;
 
 public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
-  private static Logger logger = LoggerFactory.getLogger(BasicExtension.class);
+  private static final Logger logger = LoggerFactory.getLogger(BasicExtension.class);
   private Path dataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;

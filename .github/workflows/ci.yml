@@ -29,9 +29,6 @@ jobs:
           ./gradlew spotlessGroovyGradleCheck
 
       - run: ./gradlew build
-        # FIXME: wait for client update
-        env:
-          HSTREAM_IMAGE_NAME: "hstreamdb/hstream:v0.6.6"
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}
