@@ -159,7 +159,8 @@ public class ClusterKillNodeTest {
     }
   }
 
-  @RepeatedTest(3)
+  @Disabled("HS-946")
+  @RepeatedTest(5)
   @Timeout(90)
   void testReadHalfWayDropNodes() throws Exception {
     final String stream = randStream(hStreamClient);

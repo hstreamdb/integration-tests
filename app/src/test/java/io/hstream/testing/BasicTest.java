@@ -3,9 +3,9 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.buildRecord;
 import static io.hstream.testing.TestUtils.createConsumer;
 import static io.hstream.testing.TestUtils.createConsumerCollectStringPayload;
+import static io.hstream.testing.TestUtils.createConsumerWithFixNumsRecords;
 import static io.hstream.testing.TestUtils.doProduce;
 import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
-import static io.hstream.testing.TestUtils.randBytes;
 import static io.hstream.testing.TestUtils.randRawRec;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
@@ -20,7 +20,6 @@ import io.hstream.HStreamClient;
 import io.hstream.HStreamDBClientException;
 import io.hstream.Producer;
 import io.hstream.ReceivedRawRecord;
-import io.hstream.Record;
 import io.hstream.RecordId;
 import io.hstream.Responder;
 import io.hstream.Stream;
@@ -101,12 +100,9 @@ class BasicTest {
   }
 
   void produce(Producer p, int tid) throws Exception {
-    Random rand = new Random();
-    byte[] rRec = new byte[128];
     for (int i = 0; i < 1000; i++) {
       logger.info("Thread " + tid + " write");
-      rand.nextBytes(rRec);
-      p.write(Record.newBuilder().rawRecord(rRec).build()).join();
+      p.write(randRawRec()).join();
     }
   }
 
@@ -207,7 +203,7 @@ class BasicTest {
     var rand = new Random();
     byte[] record = new byte[128];
     rand.nextBytes(record);
-    RecordId rId = producer.write(Record.newBuilder().rawRecord(record).build()).join();
+    RecordId rId = producer.write(buildRecord(record)).join();
     Assertions.assertNotNull(rId);
 
     CountDownLatch notify = new CountDownLatch(1);
@@ -244,9 +240,7 @@ class BasicTest {
     var rand = new Random();
     byte[] record = new byte[max];
     rand.nextBytes(record);
-    Assertions.assertThrows(
-        Exception.class,
-        () -> producer.write(Record.newBuilder().rawRecord(record).build()).join());
+    Assertions.assertThrows(Exception.class, () -> producer.write(buildRecord(record)).join());
   }
 
   @Test
@@ -262,12 +256,12 @@ class BasicTest {
     for (int i = 0; i < 100; i++) {
       if (rand.nextInt() % 2 == 0) {
         rand.nextBytes(record);
-        producer.write(Record.newBuilder().rawRecord(record).build()).join();
+        producer.write(buildRecord(record)).join();
         rawRecords.add(Arrays.toString(record));
       } else {
         HRecord hRec =
             HRecord.newBuilder().put("x", rand.nextInt()).put("y", rand.nextDouble()).build();
-        producer.write(Record.newBuilder().hRecord(hRec).build()).join();
+        producer.write(buildRecord(hRec)).join();
         hRecords.add(hRec);
       }
     }
@@ -315,7 +309,7 @@ class BasicTest {
 
     var producer = hStreamClient.newProducer().stream(streamName).build();
     HRecord hRec = HRecord.newBuilder().put("x", "y").put("acc", 0).put("init", false).build();
-    RecordId rId = producer.write(Record.newBuilder().hRecord(hRec).build()).join();
+    RecordId rId = producer.write(buildRecord(hRec)).join();
     Assertions.assertNotNull(rId);
 
     CountDownLatch notify = new CountDownLatch(1);
@@ -366,27 +360,33 @@ class BasicTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled("enable after HS-786 fix")
   @Test
-  @Timeout(60)
+  @Timeout(30)
   void testBatchSizeZero() throws Exception {
+    // recordCountLimit is not allowed to be less than 1
     final String streamName = randStream(hStreamClient);
-    Producer producer =
-        hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(0).build();
-    var records = doProduce(producer, 128, 100);
+    Assertions.assertThrows(
+        HStreamDBClientException.class,
+        () -> {
+          Producer producer =
+              hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(0).build();
+        });
+  }
 
-    CountDownLatch notify = new CountDownLatch(records.size());
-    final String subscription = randSubscription(hStreamClient, streamName);
-    List<String> res = new ArrayList<>();
-    var lock = new ReentrantLock();
-    Consumer consumer =
-        createConsumerCollectStringPayload(
-            hStreamClient, subscription, "test-consumer", res, notify, lock);
-    consumer.startAsync().awaitRunning();
-    var done = notify.await(20, TimeUnit.SECONDS);
-    consumer.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
-    Assertions.assertEquals(records, res);
+  @Test
+  @Timeout(20)
+  void deleteNonExistSubscription() throws Exception {
+    Assertions.assertThrows(
+        Throwable.class,
+        () -> {
+          try {
+            hStreamClient.deleteSubscription("emacs");
+          } catch (Throwable e) {
+            e.printStackTrace();
+            logger.info("get error {}", e.toString());
+            throw e;
+          }
+        });
   }
 
   @Test
@@ -433,7 +433,7 @@ class BasicTest {
     for (int i = 0; i < 100; i++) {
       HRecord hRec =
           HRecord.newBuilder().put("x", rand.nextInt()).put("y", rand.nextDouble()).build();
-      futures[i] = producer.write(Record.newBuilder().hRecord(hRec).build());
+      futures[i] = producer.write(buildRecord(hRec));
       records.add(hRec);
     }
     CompletableFuture.allOf(futures).join();
@@ -484,7 +484,7 @@ class BasicTest {
               for (int i = 0; i < cnt / 2; i++) {
                 byte[] rRec = new byte[128];
                 rand.nextBytes(rRec);
-                futures[i] = producer.write(Record.newBuilder().rawRecord(rRec).build());
+                futures[i] = producer.write(buildRecord(rRec));
               }
             });
 
@@ -494,7 +494,7 @@ class BasicTest {
               for (int i = cnt / 2; i < cnt; i++) {
                 byte[] rRec = new byte[128];
                 rand.nextBytes(rRec);
-                futures[i] = producer.write(Record.newBuilder().rawRecord(rRec).build());
+                futures[i] = producer.write(buildRecord(rRec));
               }
             });
 
@@ -532,14 +532,14 @@ class BasicTest {
         for (int j = 0; j < batchSize; j++) {
           var rRec = new byte[] {(byte) i};
           records.add(Arrays.toString(rRec));
-          writes.add(batchProducer.write(Record.newBuilder().rawRecord(rRec).build()));
+          writes.add(batchProducer.write(buildRecord(rRec)));
         }
         writes.forEach(w -> recordIds.add(w.join()));
       } else {
         logger.info("[turn]: {}, no batch write!!!!!\n", i);
         var rRec = new byte[] {(byte) i};
         records.add(Arrays.toString(rRec));
-        recordIds.add(producer.write(Record.newBuilder().rawRecord(rRec).build()).join());
+        recordIds.add(producer.write(buildRecord(rRec)).join());
       }
     }
 
@@ -600,8 +600,7 @@ class BasicTest {
     for (int i = 0; i < count; ++i) {
       byte[] rawRecord = new byte[100];
       random.nextBytes(rawRecord);
-      CompletableFuture<RecordId> future =
-          producer.write(Record.newBuilder().rawRecord(rawRecord).build());
+      CompletableFuture<RecordId> future = producer.write(buildRecord(rawRecord));
       recordIdFutures[i] = future;
     }
     // flush and close producer
@@ -623,8 +622,7 @@ class BasicTest {
       for (int i = 0; i < count; ++i) {
         byte[] rawRecord = new byte[100];
         random.nextBytes(rawRecord);
-        CompletableFuture<RecordId> future =
-            producer.write(Record.newBuilder().rawRecord(rawRecord).build());
+        CompletableFuture<RecordId> future = producer.write(buildRecord(rawRecord));
         recordIdFutures[i] = future;
       }
       CompletableFuture.allOf(recordIdFutures).join();
@@ -646,8 +644,7 @@ class BasicTest {
     for (int i = 0; i < count; ++i) {
       byte[] rawRecord = new byte[100];
       random.nextBytes(rawRecord);
-      CompletableFuture<RecordId> future =
-          producer.write(Record.newBuilder().rawRecord(rawRecord).build());
+      CompletableFuture<RecordId> future = producer.write(buildRecord(rawRecord));
       recordIdFutures[i] = future;
     }
     for (int i = 0; i < count - 1; ++i) {
@@ -909,6 +906,79 @@ class BasicTest {
             .sorted(Comparator.comparing(ReceivedRawRecord::getRecordId))
             .map(r -> Arrays.toString(r.getRawRecord()))
             .collect(Collectors.toList());
+    Assertions.assertEquals(records, res);
+  }
+
+  @Disabled("consumer-key issue")
+  @Test
+  @Timeout(60)
+  public void testConsumerInTurn() throws Exception {
+    final int recordCount = 2500;
+    final String streamName = randStream(hStreamClient);
+    final String subscription = randSubscription(hStreamClient, streamName);
+
+    BufferedProducer producer =
+        hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(50).build();
+    List<RecordId> records = doProduceAndGatherRid(producer, 1, 2500);
+    Random random = new Random();
+    final int maxReceivedCountC1 = Math.max(1, random.nextInt(recordCount / 3));
+    CountDownLatch latch1 = new CountDownLatch(1);
+    var res1 = new HashSet<RecordId>();
+    var lock = new ReentrantLock();
+    var consumer1 =
+        createConsumerWithFixNumsRecords(
+            hStreamClient, maxReceivedCountC1, subscription, "consumer1", res1, latch1, lock);
+
+    final int maxReceivedCountC2 = Math.max(1, random.nextInt(recordCount / 3));
+    CountDownLatch latch2 = new CountDownLatch(1);
+    var res2 = new HashSet<RecordId>();
+    var consumer2 =
+        createConsumerWithFixNumsRecords(
+            hStreamClient, maxReceivedCountC2, subscription, "consumer2", res2, latch2, lock);
+
+    consumer1.startAsync().awaitRunning();
+    consumer2.startAsync().awaitRunning();
+    var done1 = latch1.await(20, TimeUnit.SECONDS);
+    var done2 = latch2.await(20, TimeUnit.SECONDS);
+    consumer1.stopAsync().awaitTerminated();
+    consumer2.stopAsync().awaitTerminated();
+    logger.info("remove consumer1 and consumer2...");
+    Assertions.assertTrue(done1);
+    Assertions.assertTrue(done2);
+    Thread.sleep(1000); // leave some time to server to complete ack
+
+    var consumedRecordIds =
+        java.util.stream.Stream.of(res1, res2)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet());
+    CountDownLatch latch3 = new CountDownLatch(recordCount - consumedRecordIds.size());
+    var consumer3 =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("consumer3")
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  lock.lock();
+                  var success = consumedRecordIds.add(receivedRawRecord.getRecordId());
+                  lock.unlock();
+                  responder.ack();
+                  if (success) {
+                    latch3.countDown();
+                  }
+                })
+            .build();
+
+    consumer3.startAsync().awaitRunning();
+    var done3 = latch3.await(20, TimeUnit.SECONDS);
+    Thread.sleep(1000); // leave some time to server to complete ack
+    consumer3.stopAsync().awaitTerminated();
+    Assertions.assertTrue(done3);
+    var res = consumedRecordIds.stream().sorted().collect(Collectors.toList());
+    Assertions.assertEquals(
+        records.size(),
+        res.size(),
+        "records.size = " + records.size() + ", res.size = " + res.size());
     Assertions.assertEquals(records, res);
   }
 
@@ -1253,7 +1323,7 @@ class BasicTest {
     String subscription = randSubscription(hStreamClient, stream);
     Producer producer = hStreamClient.newProducer().stream(stream).build();
     for (int i = 0; i < total; ++i) {
-      recordIds0.add(producer.write(Record.newBuilder().rawRecord(randRecs).build()).join());
+      recordIds0.add(producer.write(buildRecord(randRecs)).join());
     }
 
     Set<RecordId> recordIds1 = new HashSet<>();
@@ -1290,8 +1360,7 @@ class BasicTest {
     Producer producer = hStreamClient.newProducer().stream(stream).build();
     Set<RecordId> recordIds = new HashSet<>();
     for (int i = 0; i < msgCnt; ++i) {
-      Assertions.assertTrue(
-          recordIds.add(producer.write(Record.newBuilder().rawRecord(randBytes()).build()).join()));
+      Assertions.assertTrue(recordIds.add(producer.write(randRawRec()).join()));
     }
 
     AtomicReference<Integer> which = new AtomicReference<>(null);

@@ -50,7 +50,7 @@ public class TestUtils {
   }
 
   public static Record randRawRec() {
-    return Record.newBuilder().rawRecord(randBytes()).build();
+    return buildRecord(randBytes());
   }
 
   public static Record buildRecord(byte[] xs) {
@@ -182,7 +182,7 @@ public class TestUtils {
 
   public static boolean isAscending(List<RecordId> input) {
     if (input.isEmpty()) {
-      return false;
+      return true;
     }
     if (input.size() == 1) {
       return true;
@@ -197,12 +197,10 @@ public class TestUtils {
   }
 
   public static void assertRecordIdsAscending(List<ReceivedRawRecord> input) {
-    if (!input.isEmpty()) {
-      Assertions.assertTrue(
-          isAscending(
-              input.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList())),
-          "is not ascending");
-    }
+    Assertions.assertTrue(
+        isAscending(
+            input.stream().map(ReceivedRawRecord::getRecordId).collect(Collectors.toList())),
+        "is not ascending");
   }
 
   public static Consumer createConsumer(
@@ -301,7 +299,7 @@ public class TestUtils {
     var writes = new ArrayList<CompletableFuture<RecordId>>();
     for (int i = 0; i < recordsNums; i++) {
       rand.nextBytes(rRec);
-      writes.add(producer.write(Record.newBuilder().rawRecord(rRec).build()));
+      writes.add(producer.write(buildRecord(rRec)));
     }
     writes.forEach(w -> rids.add(w.join()));
     Assertions.assertEquals(recordsNums, rids.size());
