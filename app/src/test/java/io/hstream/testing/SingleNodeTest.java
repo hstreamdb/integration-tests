@@ -54,6 +54,7 @@ class SingleNodeTest {
 
   // -----------------------------------------------------------------------------------------------
 
+  @Disabled("HS-946")
   @Test
   @Timeout(60)
   void testGetResourceAfterRestartServer() throws Exception {
