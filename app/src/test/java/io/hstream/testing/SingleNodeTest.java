@@ -104,7 +104,7 @@ class SingleNodeTest {
     Assertions.assertEquals(records, res);
   }
 
-  @Disabled("enable after HS-806 fix.")
+  @Disabled("HS-946")
   @Test
   @Timeout(60)
   void testConsumeAfterRestartServer() throws Exception {

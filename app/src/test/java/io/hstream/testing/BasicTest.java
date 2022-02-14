@@ -99,13 +99,6 @@ class BasicTest {
     hStreamClient.close();
   }
 
-  void produce(Producer p, int tid) throws Exception {
-    for (int i = 0; i < 1000; i++) {
-      logger.info("Thread " + tid + " write");
-      p.write(randRawRec()).join();
-    }
-  }
-
   // -----------------------------------------------------------------------------------------------
 
   @Test
@@ -132,24 +125,6 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void testDeleteStream() {
-    final String streamName = randStream(hStreamClient);
-    List<Stream> streams = hStreamClient.listStreams();
-    Assertions.assertEquals(1, streams.size());
-    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
-    hStreamClient.deleteStream(streamName);
-    streams = hStreamClient.listStreams();
-    Assertions.assertEquals(0, streams.size());
-  }
-
-  @Test
-  @Timeout(60)
-  void testDeleteNonExistingStreamShouldFail() {
-    Assertions.assertThrows(Exception.class, () -> hStreamClient.deleteStream("aaa"));
-  }
-
-  @Test
-  @Timeout(60)
   void testListStreams() {
     Assertions.assertTrue(hStreamClient.listStreams().isEmpty());
     var streamNames = new ArrayList<String>();
@@ -162,6 +137,18 @@ class BasicTest {
             .sorted()
             .collect(Collectors.toList());
     Assertions.assertEquals(streamNames.stream().sorted().collect(Collectors.toList()), res);
+  }
+
+  @Test
+  @Timeout(60)
+  void testDeleteStream() {
+    final String streamName = randStream(hStreamClient);
+    List<Stream> streams = hStreamClient.listStreams();
+    Assertions.assertEquals(1, streams.size());
+    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
+    hStreamClient.deleteStream(streamName);
+    streams = hStreamClient.listStreams();
+    Assertions.assertEquals(0, streams.size());
   }
 
   @Test
@@ -180,19 +167,71 @@ class BasicTest {
     Assertions.assertEquals(subscriptions.stream().sorted().collect(Collectors.toList()), res);
   }
 
+  @Disabled("FIXME")
+  @Test
+  @Timeout(20)
+  void testDeleteSubscription() throws Exception {
+    final String stream = randStream(hStreamClient);
+    final String subscription = randSubscription(hStreamClient, stream);
+    Assertions.assertEquals(
+        subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
+    hStreamClient.deleteSubscription(subscription);
+    Assertions.assertEquals(0, hStreamClient.listSubscriptions().size());
+    Thread.sleep(1000);
+  }
+
+  @Test
+  @Timeout(20)
+  void testCreateSubscriptionOnNonExistStreamShouldFail() throws Exception {
+    String stream = randText();
+    Assertions.assertThrows(
+        Throwable.class,
+        () -> {
+          String subscription = randSubscription(hStreamClient, stream);
+        });
+  }
+
+  @Test
+  @Timeout(20)
+  void testCreateSubscriptionOnDeletedStreamShouldFail() throws Exception {
+    String stream = randStream(hStreamClient);
+    hStreamClient.deleteStream(stream);
+    Assertions.assertThrows(
+        Throwable.class,
+        () -> {
+          String subscription = randSubscription(hStreamClient, stream);
+        });
+  }
+
+  @Disabled("HS-937")
+  @Timeout(20)
+  void testCreateConsumerOnDeletedSubscriptionShouldFail() throws Exception {
+    String stream = randStream(hStreamClient);
+    String subscription = randSubscription(hStreamClient, stream);
+    hStreamClient.deleteSubscription(subscription);
+
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  logger.debug("get id = {}", recs.getRecordId());
+                  recv.ack();
+                })
+            .build();
+    consumer.startAsync().awaitRunning();
+    Thread.sleep(5000);
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertNotNull(consumer.failureCause());
+  }
+
   @Test
   @Timeout(60)
   void testCreateConsumerWithoutSubscriptionNameShouldFail() {
     Assertions.assertThrows(
         NullPointerException.class,
         () -> hStreamClient.newConsumer().name("test-consumer").build());
-  }
-
-  @Disabled("enable after HS-805 fix")
-  @Test
-  @Timeout(60)
-  void testDeleteNonExistingSubscriptionShouldFail() {
-    Assertions.assertThrows(Exception.class, () -> hStreamClient.deleteSubscription("aaa"));
   }
 
   @Test
@@ -233,7 +272,7 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void testWriteRawOutOfPayloadLimitShouldFailed() {
+  void testWriteRawOutOfPayloadLimitShouldFail() {
     int max = 1024 * 1024 + 20;
     final String streamName = randStream(hStreamClient);
     var producer = hStreamClient.newProducer().stream(streamName).build();
@@ -241,6 +280,44 @@ class BasicTest {
     byte[] record = new byte[max];
     rand.nextBytes(record);
     Assertions.assertThrows(Exception.class, () -> producer.write(buildRecord(record)).join());
+  }
+
+  @Test
+  @Timeout(60)
+  void testWriteJSON() throws Exception {
+    final String streamName = randStream(hStreamClient);
+    List<Stream> streams = hStreamClient.listStreams();
+    Assertions.assertEquals(1, streams.size());
+    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
+
+    var producer = hStreamClient.newProducer().stream(streamName).build();
+    HRecord hRec = HRecord.newBuilder().put("x", "y").put("acc", 0).put("init", false).build();
+    RecordId rId = producer.write(buildRecord(hRec)).join();
+    Assertions.assertNotNull(rId);
+
+    CountDownLatch notify = new CountDownLatch(1);
+    final String subscription = randSubscription(hStreamClient, streamName);
+    List<HRecord> res = new ArrayList<>();
+    var lock = new ReentrantLock();
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .name("test-consumer")
+            .hRecordReceiver(
+                ((receivedHRecord, responder) -> {
+                  lock.lock();
+                  res.add(receivedHRecord.getHRecord());
+                  lock.unlock();
+                  responder.ack();
+                  notify.countDown();
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+    var done = notify.await(20, TimeUnit.SECONDS);
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertTrue(done);
+    Assertions.assertEquals(hRec.toString(), res.get(0).toString());
   }
 
   @Test
@@ -301,44 +378,6 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void testWriteJSON() throws Exception {
-    final String streamName = randStream(hStreamClient);
-    List<Stream> streams = hStreamClient.listStreams();
-    Assertions.assertEquals(1, streams.size());
-    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
-
-    var producer = hStreamClient.newProducer().stream(streamName).build();
-    HRecord hRec = HRecord.newBuilder().put("x", "y").put("acc", 0).put("init", false).build();
-    RecordId rId = producer.write(buildRecord(hRec)).join();
-    Assertions.assertNotNull(rId);
-
-    CountDownLatch notify = new CountDownLatch(1);
-    final String subscription = randSubscription(hStreamClient, streamName);
-    List<HRecord> res = new ArrayList<>();
-    var lock = new ReentrantLock();
-    Consumer consumer =
-        hStreamClient
-            .newConsumer()
-            .subscription(subscription)
-            .name("test-consumer")
-            .hRecordReceiver(
-                ((receivedHRecord, responder) -> {
-                  lock.lock();
-                  res.add(receivedHRecord.getHRecord());
-                  lock.unlock();
-                  responder.ack();
-                  notify.countDown();
-                }))
-            .build();
-    consumer.startAsync().awaitRunning();
-    var done = notify.await(20, TimeUnit.SECONDS);
-    consumer.stopAsync().awaitTerminated();
-    Assertions.assertTrue(done);
-    Assertions.assertEquals(hRec.toString(), res.get(0).toString());
-  }
-
-  @Test
-  @Timeout(60)
   void testWriteRawBatch() throws Exception {
     final String streamName = randStream(hStreamClient);
     BufferedProducer producer =
@@ -370,22 +409,6 @@ class BasicTest {
         () -> {
           Producer producer =
               hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(0).build();
-        });
-  }
-
-  @Test
-  @Timeout(20)
-  void deleteNonExistSubscription() throws Exception {
-    Assertions.assertThrows(
-        Throwable.class,
-        () -> {
-          try {
-            hStreamClient.deleteSubscription("emacs");
-          } catch (Throwable e) {
-            e.printStackTrace();
-            logger.info("get error {}", e.toString());
-            throw e;
-          }
         });
   }
 
@@ -660,7 +683,7 @@ class BasicTest {
   @Disabled("HS-937")
   @Test
   @Timeout(60)
-  void createConsumerWithExistedConsumerNameShouldThrowException() throws InterruptedException {
+  void testCreateConsumerWithExistedConsumerNameShouldFail() throws InterruptedException {
     final String streamName = randStream(hStreamClient);
     final String subscription = randSubscription(hStreamClient, streamName);
     Consumer consumer =
@@ -674,6 +697,37 @@ class BasicTest {
         hStreamClient
             .newConsumer()
             .subscription(subscription)
+            .name("test-consumer")
+            .rawRecordReceiver(((receivedRawRecord, responder) -> responder.ack()))
+            .build();
+    consumer.startAsync().awaitRunning();
+    Thread.sleep(1500);
+    consumer1.startAsync().awaitRunning();
+    Thread.sleep(1500);
+    Assertions.assertNotNull(consumer1.failureCause());
+    Assertions.assertTrue(consumer1.failureCause() instanceof HStreamDBClientException);
+    consumer.stopAsync().awaitTerminated();
+  }
+
+  @Disabled("HS-937")
+  @Test
+  @Timeout(60)
+  void testCreateConsumerWithExistedConsumerNameOnDifferentSubscriptionShouldNotFail()
+      throws InterruptedException {
+    final String streamName = randStream(hStreamClient);
+    final String subscription0 = randSubscription(hStreamClient, streamName);
+    final String subscription1 = randSubscription(hStreamClient, streamName);
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription0)
+            .name("test-consumer")
+            .rawRecordReceiver(((receivedRawRecord, responder) -> responder.ack()))
+            .build();
+    Consumer consumer1 =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription1)
             .name("test-consumer")
             .rawRecordReceiver(((receivedRawRecord, responder) -> responder.ack()))
             .build();
@@ -920,6 +974,7 @@ class BasicTest {
     BufferedProducer producer =
         hStreamClient.newBufferedProducer().stream(streamName).recordCountLimit(50).build();
     List<RecordId> records = doProduceAndGatherRid(producer, 1, 2500);
+    producer.close();
     Random random = new Random();
     final int maxReceivedCountC1 = Math.max(1, random.nextInt(recordCount / 3));
     CountDownLatch latch1 = new CountDownLatch(1);
@@ -1211,6 +1266,40 @@ class BasicTest {
     Assertions.assertThrows(Exception.class, () -> producer.write(randRawRec()).join());
   }
 
+  @Disabled("HS-937")
+  @Test
+  @Timeout(60)
+  void testConsumeFromToDeletedSubscriptionShouldFail() throws Exception {
+    String stream = randStream(hStreamClient);
+    String subscription = randSubscription(hStreamClient, stream);
+    Set<RecordId> recordIds0 = new HashSet<>();
+    Set<RecordId> recordIds1 = new HashSet<>();
+    Producer producer = hStreamClient.newProducer().stream(stream).build();
+
+    int msgCnt = 2000;
+    for (int i = 0; i < msgCnt; ++i) {
+      recordIds0.add(producer.write(randRawRec()).join());
+    }
+    hStreamClient.deleteSubscription(subscription);
+
+    CountDownLatch countDown = new CountDownLatch(msgCnt);
+    Consumer consumer =
+        hStreamClient
+            .newConsumer()
+            .subscription(subscription)
+            .rawRecordReceiver(
+                (recs, recv) -> {
+                  if (recordIds1.add(recs.getRecordId())) {
+                    recv.ack();
+                  }
+                })
+            .build();
+    consumer.startAsync().awaitRunning();
+    countDown.await(30, TimeUnit.SECONDS);
+    consumer.stopAsync().awaitTerminated();
+    Assertions.assertNotEquals(recordIds0, recordIds1);
+  }
+
   @Test
   @Timeout(60)
   void testMultiThreadListStream() throws Exception {
@@ -1261,7 +1350,7 @@ class BasicTest {
 
   @Test
   @Timeout(60)
-  void createThenDeleteStreamFromDifferentServerUrl() throws Exception {
+  void testCreateThenDeleteStreamFromDifferentServerUrl() throws Exception {
     ArrayList<HStreamClient> clients = new ArrayList<>();
     for (String hServerUrl : hServerUrls) {
       clients.add(HStreamClient.builder().serviceUrl(hServerUrl).build());
@@ -1420,5 +1509,37 @@ class BasicTest {
       Assertions.assertEquals(0, recordIds0.size());
       Assertions.assertEquals(msgCnt, recordIds1.size());
     }
+  }
+
+  @Test
+  @Timeout(20)
+  void testDeleteNonExistSubscriptionShouldFail() throws Exception {
+    Assertions.assertThrows(
+        Throwable.class,
+        () -> {
+          try {
+            hStreamClient.deleteSubscription(randText());
+          } catch (Throwable e) {
+            e.printStackTrace();
+            logger.info("============= error\n{}", e.toString());
+            throw e;
+          }
+        });
+  }
+
+  @Test
+  @Timeout(20)
+  void testDeleteNonExistStreamShouldFail() throws Exception {
+    Assertions.assertThrows(
+        Throwable.class,
+        () -> {
+          try {
+            hStreamClient.deleteStream(randText());
+          } catch (Throwable e) {
+            e.printStackTrace();
+            logger.info("============= error\n{}", e.toString());
+            throw e;
+          }
+        });
   }
 }
