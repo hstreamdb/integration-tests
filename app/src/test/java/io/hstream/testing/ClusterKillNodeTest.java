@@ -245,6 +245,7 @@ public class ClusterKillNodeTest {
     Assertions.assertTrue(id0.compareTo(id1) < 0);
   }
 
+  @Disabled("HS-946")
   @Test
   @Timeout(60)
   void testJoinConsumerGroupBeforeAndAfterKillNodes() throws Exception {
