@@ -283,6 +283,7 @@ public class ClusterKillNodeTest {
     Assertions.assertEquals(recordIds0, recordIds1);
   }
 
+  @Disabled("HS-946")
   @Test
   @Timeout(150)
   void testKillAllNodesThenRestartOneShouldConsumeAll() throws Exception {

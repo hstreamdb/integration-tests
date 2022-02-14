@@ -1274,6 +1274,7 @@ class BasicTest {
     }
   }
 
+  @Disabled("unstable")
   @Test
   @Timeout(60)
   void testMultiThreadDeleteSameStream() throws Exception {
