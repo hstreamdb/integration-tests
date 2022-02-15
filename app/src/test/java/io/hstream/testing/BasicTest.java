@@ -222,8 +222,8 @@ class BasicTest {
             .build();
     consumer.startAsync().awaitRunning();
     Thread.sleep(5000);
-    Assertions.assertNotNull(consumer.failureCause());
     consumer.stopAsync().awaitTerminated();
+    Assertions.assertNotNull(consumer.failureCause());
   }
 
   @Test
