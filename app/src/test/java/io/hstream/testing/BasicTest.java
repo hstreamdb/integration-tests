@@ -167,7 +167,6 @@ class BasicTest {
     Assertions.assertEquals(subscriptions.stream().sorted().collect(Collectors.toList()), res);
   }
 
-  @Disabled("FIXME")
   @Test
   @Timeout(20)
   void testDeleteSubscription() throws Exception {
@@ -203,7 +202,8 @@ class BasicTest {
         });
   }
 
-  @Disabled("HS-937")
+  @Disabled("FIXME")
+  @Test
   @Timeout(20)
   void testCreateConsumerOnDeletedSubscriptionShouldFail() throws Exception {
     String stream = randStream(hStreamClient);
@@ -1266,7 +1266,6 @@ class BasicTest {
     Assertions.assertThrows(Exception.class, () -> producer.write(randRawRec()).join());
   }
 
-  @Disabled("HS-937")
   @Test
   @Timeout(60)
   void testConsumeFromToDeletedSubscriptionShouldFail() throws Exception {

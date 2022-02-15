@@ -22,7 +22,7 @@ dependencies {
     testImplementation "org.testcontainers:junit-jupiter:1.16.2"
     testImplementation "org.testcontainers:toxiproxy:1.16.2"
 
-    testImplementation 'io.hstream:hstreamdb-java:0.7.0-SNAPSHOT'
+    testImplementation 'io.hstream:hstreamdb-java:0.7.1-SNAPSHOT'
     testImplementation 'com.github.docker-java:docker-java:3.2.12'
 
     compileOnly 'org.slf4j:slf4j-api:1.7.30'
