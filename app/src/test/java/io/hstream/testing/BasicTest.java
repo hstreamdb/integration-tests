@@ -222,8 +222,8 @@ class BasicTest {
             .build();
     consumer.startAsync().awaitRunning();
     Thread.sleep(5000);
-    consumer.stopAsync().awaitTerminated();
     Assertions.assertNotNull(consumer.failureCause());
+    consumer.stopAsync().awaitTerminated();
   }
 
   @Test
@@ -1265,39 +1265,6 @@ class BasicTest {
 
     hStreamClient.deleteStream(stream);
     Assertions.assertThrows(Exception.class, () -> producer.write(randRawRec()).join());
-  }
-
-  @Test
-  @Timeout(60)
-  void testConsumeFromToDeletedSubscriptionShouldFail() throws Exception {
-    String stream = randStream(hStreamClient);
-    String subscription = randSubscription(hStreamClient, stream);
-    Set<RecordId> recordIds0 = new HashSet<>();
-    Set<RecordId> recordIds1 = new HashSet<>();
-    Producer producer = hStreamClient.newProducer().stream(stream).build();
-
-    int msgCnt = 2000;
-    for (int i = 0; i < msgCnt; ++i) {
-      recordIds0.add(producer.write(randRawRec()).join());
-    }
-    hStreamClient.deleteSubscription(subscription);
-
-    CountDownLatch countDown = new CountDownLatch(msgCnt);
-    Consumer consumer =
-        hStreamClient
-            .newConsumer()
-            .subscription(subscription)
-            .rawRecordReceiver(
-                (recs, recv) -> {
-                  if (recordIds1.add(recs.getRecordId())) {
-                    recv.ack();
-                  }
-                })
-            .build();
-    consumer.startAsync().awaitRunning();
-    countDown.await(30, TimeUnit.SECONDS);
-    consumer.stopAsync().awaitTerminated();
-    Assertions.assertNotEquals(recordIds0, recordIds1);
   }
 
   @Test
