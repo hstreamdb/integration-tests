@@ -712,8 +712,9 @@ class BasicTest {
   @Disabled("HS-937")
   @Test
   @Timeout(60)
-  void testCreateConsumerWithExistedConsumerNameOnDifferentSubscriptionShouldNotFail()
+  void testCreateConsumerWithExistedConsumerNameOnDifferentSubscription()
       throws InterruptedException {
+    // should be okay
     final String streamName = randStream(hStreamClient);
     final String subscription0 = randSubscription(hStreamClient, streamName);
     final String subscription1 = randSubscription(hStreamClient, streamName);
@@ -1519,7 +1520,6 @@ class BasicTest {
           try {
             hStreamClient.deleteSubscription(randText());
           } catch (Throwable e) {
-            e.printStackTrace();
             logger.info("============= error\n{}", e.toString());
             throw e;
           }
@@ -1535,7 +1535,6 @@ class BasicTest {
           try {
             hStreamClient.deleteStream(randText());
           } catch (Throwable e) {
-            e.printStackTrace();
             logger.info("============= error\n{}", e.toString());
             throw e;
           }
