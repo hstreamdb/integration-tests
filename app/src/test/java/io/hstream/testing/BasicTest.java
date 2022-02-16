@@ -202,7 +202,6 @@ class BasicTest {
         });
   }
 
-  @Disabled("FIXME")
   @Test
   @Timeout(20)
   void testCreateConsumerOnDeletedSubscriptionShouldFail() throws Exception {
@@ -222,8 +221,8 @@ class BasicTest {
             .build();
     consumer.startAsync().awaitRunning();
     Thread.sleep(5000);
-    consumer.stopAsync().awaitTerminated();
     Assertions.assertNotNull(consumer.failureCause());
+    Assertions.assertTrue(consumer.failureCause() instanceof HStreamDBClientException);
   }
 
   @Test
@@ -736,9 +735,8 @@ class BasicTest {
     Thread.sleep(1500);
     consumer1.startAsync().awaitRunning();
     Thread.sleep(1500);
-    Assertions.assertNotNull(consumer1.failureCause());
-    Assertions.assertTrue(consumer1.failureCause() instanceof HStreamDBClientException);
     consumer.stopAsync().awaitTerminated();
+    consumer1.stopAsync().awaitTerminated();
   }
 
   @Test
