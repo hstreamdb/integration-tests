@@ -708,7 +708,6 @@ class BasicTest {
     consumer.stopAsync().awaitTerminated();
   }
 
-  @Disabled("HS-937")
   @Test
   @Timeout(60)
   void testCreateConsumerWithExistedConsumerNameOnDifferentSubscription()
