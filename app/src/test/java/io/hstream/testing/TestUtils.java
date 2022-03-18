@@ -159,7 +159,7 @@ public class TestUtils {
                 + " --log-with-color"
                 + " --store-log-level "
                 + "error")
-        .waitingFor(Wait.forLogMessage(".*Server is starting on port.*", 1));
+        .waitingFor(Wait.forLogMessage(".*Server is started on port.*", 1));
   }
 
   // -----------------------------------------------------------------------------------------------
