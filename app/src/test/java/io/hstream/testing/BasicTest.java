@@ -1296,7 +1296,9 @@ class BasicTest {
                 try {
                   c.createStream(stream);
                 } catch (Exception e) {
-                  exceptions.add(e);
+                  synchronized (exceptions) {
+                    exceptions.add(e);
+                  }
                 }
               }));
     }
