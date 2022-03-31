@@ -29,10 +29,10 @@ jobs:
           ./gradlew spotlessGroovyGradleCheck
 
       - run: |
-          if [ "${{ github.event.client_payload.image }}" != '' ]
-            then HSTREAM_IMAGE_NAME="${{ github.event.client_payload.image }}"
+          if [ "${{ github.event.client_payload.image }}" != '' ]; then
+            export HSTREAM_IMAGE_NAME="${{ github.event.client_payload.image }}"
           fi
-          ./gradlew build
+          ./gradlew :app:test --info
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}
