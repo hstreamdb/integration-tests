@@ -1,11 +1,10 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.randText;
+import static io.hstream.testing.TestUtils.*;
 
 import io.hstream.HStreamClient;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
@@ -43,7 +42,7 @@ public class Subscription {
 
   @Test
   @Timeout(20)
-  void testDeleteSubscription() throws Exception {
+  void testDeleteNonActivatedSubscription() throws Exception {
     final String stream = randStream(client);
     final String subscription = randSubscription(client, stream);
     Assertions.assertEquals(subscription, client.listSubscriptions().get(0).getSubscriptionId());
@@ -88,5 +87,84 @@ public class Subscription {
             throw e;
           }
         });
+  }
+
+  @Test
+  @Timeout(20)
+  void testDeleteRunningSubscription() throws Exception {
+    final String stream = randStream(client);
+    var producer = client.newProducer().stream(stream).build();
+    final String subscription = randSubscription(client, stream);
+    Assertions.assertEquals(subscription, client.listSubscriptions().get(0).getSubscriptionId());
+    doProduce(producer, 100, 10);
+    activateSubscription(client, subscription, 1);
+
+    Assertions.assertThrows(Throwable.class, () -> client.deleteSubscription(subscription));
+    client.deleteSubscription(subscription, true);
+    Assertions.assertEquals(0, client.listSubscriptions().size());
+    Thread.sleep(100);
+  }
+
+  @Test
+  @Timeout(20)
+  void testForceDeleteWaitingSubscriptionShouldNotStuck() throws Exception {
+    // Waiting subscription is the subscription that has consumption up to date with the data in the
+    // stream
+    final String stream = randStream(client);
+    var producer = client.newProducer().stream(stream).build();
+    final String subscription = randSubscription(client, stream);
+    Assertions.assertEquals(subscription, client.listSubscriptions().get(0).getSubscriptionId());
+    doProduce(producer, 100, 1);
+    List<byte[]> res = new ArrayList<>();
+    consume(
+        client,
+        subscription,
+        "c1",
+        10,
+        (r) -> {
+          res.add(r.getRawRecord());
+          return false;
+        });
+    Assertions.assertEquals(1, res.size());
+    client.deleteSubscription(subscription, true);
+    Assertions.assertEquals(0, client.listSubscriptions().size());
+    Thread.sleep(100);
+  }
+
+  @Test
+  @Timeout(20)
+  void testCreateANewSubscriptionWithTheSameNameAsTheDeletedShouldBeIndependent() throws Exception {
+    final String stream = randStream(client);
+    var producer = client.newProducer().stream(stream).build();
+    final String subscription = randSubscription(client, stream);
+    doProduce(producer, 100, 10);
+    List<byte[]> res = new ArrayList<>();
+    consume(
+        client,
+        subscription,
+        "c1",
+        10,
+        (r) -> {
+          res.add(r.getRawRecord());
+          return res.size() < 10;
+        });
+    Assertions.assertEquals(10, res.size());
+    client.deleteSubscription(subscription, true);
+    Assertions.assertEquals(0, client.listSubscriptions().size());
+
+    client.createSubscription(
+        io.hstream.Subscription.newBuilder().subscription(subscription).stream(stream).build());
+    List<byte[]> res2 = new ArrayList<>();
+    consume(
+        client,
+        subscription,
+        "c1",
+        10,
+        (r) -> {
+          res2.add(r.getRawRecord());
+          return res2.size() < 10;
+        });
+    Assertions.assertEquals(10, res2.size());
+    Thread.sleep(100);
   }
 }

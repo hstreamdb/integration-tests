@@ -218,6 +218,14 @@ public class TestUtils {
   }
 
   // -----------------------------------------------------------------------------------------------
+  public static void activateSubscription(
+      HStreamClient client, String subscription, int consumerNum) throws Exception {
+    for (int i = 0; i < consumerNum; i++) {
+      String name = "test_consumer_" + randText();
+      consume(client, subscription, name, 10, x -> false);
+    }
+  }
+
   public static void consume(
       HStreamClient client,
       String subscription,

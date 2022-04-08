@@ -1,14 +1,6 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.buildRecord;
-import static io.hstream.testing.TestUtils.consume;
-import static io.hstream.testing.TestUtils.consumeAsync;
-import static io.hstream.testing.TestUtils.doProduce;
-import static io.hstream.testing.TestUtils.makeBufferedProducer;
-import static io.hstream.testing.TestUtils.produce;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
+import static io.hstream.testing.TestUtils.*;
 
 import io.hstream.BufferedProducer;
 import io.hstream.HStreamClient;
@@ -50,6 +42,15 @@ public class Consumer {
 
     Assertions.assertThrows(
         ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
+
+    String subscriptionNew = randSubscription(client, stream);
+    var producer = client.newProducer().stream(stream).build();
+    doProduce(producer, 100, 200);
+    activateSubscription(client, subscriptionNew, 1);
+    client.deleteSubscription(subscriptionNew, true);
+    Assertions.assertThrows(
+        ExecutionException.class, () -> consume(client, subscriptionNew, "c1", 10, x -> false));
+    Thread.sleep(100);
   }
 
   @Tag("efg")
