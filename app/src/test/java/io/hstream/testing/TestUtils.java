@@ -219,6 +219,22 @@ public class TestUtils {
   }
 
   // -----------------------------------------------------------------------------------------------
+
+  public static void createStreamSucceeds(HStreamClient client, int sizeExpected, String stream) {
+    List<io.hstream.Stream> streams = client.listStreams();
+    Assertions.assertEquals(sizeExpected, streams.size());
+    Assertions.assertTrue(
+        streams.stream().map(s -> s.getStreamName()).collect(Collectors.toList()).contains(stream));
+  }
+
+  public static void deleteStreamSucceeds(HStreamClient client, int sizeExpected, String stream) {
+    List<io.hstream.Stream> streams = client.listStreams();
+    Assertions.assertEquals(sizeExpected, streams.size());
+    Assertions.assertFalse(
+        streams.stream().map(s -> s.getStreamName()).collect(Collectors.toList()).contains(stream));
+  }
+
+  // -----------------------------------------------------------------------------------------------
   // start an async consumers and waiting until received first record
   public static List<Consumer> activateSubscription(
       HStreamClient client, String subscription, int consumerNum) throws Exception {
