@@ -9,10 +9,7 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -251,6 +248,7 @@ public class Stream {
     Thread.sleep(1000);
   }
 
+  @Disabled("HS-1314")
   @Test
   @Timeout(60)
   void testCreateANewStreamWithSameNameAfterDeletion() throws Exception {
