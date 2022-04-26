@@ -48,7 +48,8 @@ public class Consumer {
     doProduce(producer, 100, 200);
     var consumer = activateSubscription(client, subscriptionNew);
     client.deleteSubscription(subscriptionNew, true);
-    consumer.stopAsync().awaitTerminated();
+    Thread.sleep(3000);
+    Assertions.assertNotNull(consumer.failureCause());
     Assertions.assertThrows(
         ExecutionException.class, () -> consume(client, subscriptionNew, "c1", 10, x -> false));
     Thread.sleep(100);

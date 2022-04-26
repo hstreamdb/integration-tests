@@ -101,7 +101,8 @@ public class Subscription {
 
     Assertions.assertThrows(Throwable.class, () -> client.deleteSubscription(subscription));
     client.deleteSubscription(subscription, true);
-    consumer.stopAsync().awaitTerminated();
+    Thread.sleep(3000);
+    Assertions.assertNotNull(consumer.failureCause());
     Assertions.assertEquals(0, client.listSubscriptions().size());
     Thread.sleep(100);
   }
