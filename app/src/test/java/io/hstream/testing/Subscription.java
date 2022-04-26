@@ -97,11 +97,11 @@ public class Subscription {
     final String subscription = randSubscription(client, stream);
     Assertions.assertEquals(subscription, client.listSubscriptions().get(0).getSubscriptionId());
     doProduce(producer, 100, 10);
-    var consumers = activateSubscription(client, subscription, 1);
+    var consumer = activateSubscription(client, subscription);
 
     Assertions.assertThrows(Throwable.class, () -> client.deleteSubscription(subscription));
     client.deleteSubscription(subscription, true);
-    consumers.forEach(x -> x.stopAsync().awaitTerminated());
+    consumer.stopAsync().awaitTerminated();
     Assertions.assertEquals(0, client.listSubscriptions().size());
     Thread.sleep(100);
   }

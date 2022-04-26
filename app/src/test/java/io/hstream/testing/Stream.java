@@ -258,7 +258,7 @@ public class Stream {
     String subscription = randSubscription(client, stream);
     io.hstream.Producer producer = client.newProducer().stream(stream).build();
     doProduce(producer, 100, 10);
-    activateSubscription(client, subscription, 1);
+    activateSubscription(client, subscription);
     client.deleteStream(stream, true);
     deleteStreamSucceeds(client, 0, stream);
 
@@ -266,7 +266,7 @@ public class Stream {
     createStreamSucceeds(client, 1, stream);
     String subscription2 = randSubscription(client, stream);
     doProduce(producer, 100, 10);
-    activateSubscription(client, subscription2, 1);
+    activateSubscription(client, subscription2);
     Thread.sleep(100);
     client.deleteStream(stream, true);
     deleteStreamSucceeds(client, 0, stream);

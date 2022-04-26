@@ -40,16 +40,15 @@ public class Consumer {
     String stream = randStream(client);
     String subscription = randSubscription(client, stream);
     client.deleteSubscription(subscription);
-
     Assertions.assertThrows(
         ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
 
     String subscriptionNew = randSubscription(client, stream);
     var producer = client.newProducer().stream(stream).build();
     doProduce(producer, 100, 200);
-    var consumers = activateSubscription(client, subscriptionNew, 1);
+    var consumer = activateSubscription(client, subscriptionNew);
     client.deleteSubscription(subscriptionNew, true);
-    consumers.forEach(x -> x.stopAsync().awaitTerminated());
+    consumer.stopAsync().awaitTerminated();
     Assertions.assertThrows(
         ExecutionException.class, () -> consume(client, subscriptionNew, "c1", 10, x -> false));
     Thread.sleep(100);

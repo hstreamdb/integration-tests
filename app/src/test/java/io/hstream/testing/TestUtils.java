@@ -235,23 +235,19 @@ public class TestUtils {
   }
 
   // -----------------------------------------------------------------------------------------------
-  // start an async consumers and waiting until received first record
-  public static List<Consumer> activateSubscription(
-      HStreamClient client, String subscription, int consumerNum) throws Exception {
-    var res = new ArrayList<Consumer>(consumerNum);
-    for (int i = 0; i < consumerNum; i++) {
-      var latch = new CountDownLatch(1);
-      var c =
-          client
-              .newConsumer()
-              .subscription(subscription)
-              .rawRecordReceiver((x, y) -> latch.countDown())
-              .build();
-      c.startAsync().awaitRunning();
-      Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
-    }
-    ;
-    return res;
+  // start an async consumer and waiting until received first record
+  public static Consumer activateSubscription(HStreamClient client, String subscription)
+      throws Exception {
+    var latch = new CountDownLatch(1);
+    var c =
+        client
+            .newConsumer()
+            .subscription(subscription)
+            .rawRecordReceiver((x, y) -> latch.countDown())
+            .build();
+    c.startAsync().awaitRunning();
+    Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    return c;
   }
 
   public static void consume(
