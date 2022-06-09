@@ -6,7 +6,10 @@ plugins {
 }
 
 repositories {
-    // mavenLocal()
+    if (project.hasProperty("enableMavenLocal")) {
+        project.logger.info("enabled mavenLocal")
+        mavenLocal()
+    }
     mavenCentral()
     maven {
         url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
