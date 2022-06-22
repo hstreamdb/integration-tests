@@ -85,7 +85,7 @@ public class Stream {
     String stream = randText();
     var es = runWithThreads(3, () -> client.createStream(stream));
     createStreamSucceeds(client, 1, stream);
-    Assertions.assertEquals(hServerUrls.size() - 1, es.size());
+    Assertions.assertEquals(2, es.size());
   }
 
   @Test
@@ -97,7 +97,7 @@ public class Stream {
     var es = runWithThreads(3, () -> client.deleteStream(stream));
 
     deleteStreamSucceeds(client, 0, stream);
-    Assertions.assertEquals(hServerUrls.size() - 1, es.size());
+    Assertions.assertEquals(2, es.size());
   }
 
   @Test
@@ -109,7 +109,7 @@ public class Stream {
     var es = runWithThreads(3, () -> client.deleteStream(stream, true));
 
     deleteStreamSucceeds(client, 0, stream);
-    Assertions.assertEquals(hServerUrls.size() - 1, es.size());
+    Assertions.assertEquals(2, es.size());
   }
 
   @Test

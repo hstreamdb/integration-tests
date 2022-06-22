@@ -209,6 +209,7 @@ public class TestUtils {
                 + address
                 + " --server-id "
                 + serverId
+                + " --seed-nodes 127.0.0.1:65000"
                 + " --zkuri "
                 + zkHost
                 + ":2181"

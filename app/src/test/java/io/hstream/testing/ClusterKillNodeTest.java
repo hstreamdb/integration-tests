@@ -1,5 +1,6 @@
 package io.hstream.testing;
 
+import static io.hstream.testing.ClusterExtension.CLUSTER_SIZE;
 import static io.hstream.testing.TestUtils.buildRecord;
 import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
 import static io.hstream.testing.TestUtils.randRawRec;
@@ -109,7 +110,7 @@ public class ClusterKillNodeTest {
   @Test
   @Timeout(60)
   void testListStreamsShouldFailWhenAllNodesAreUnavailable() throws Exception {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < CLUSTER_SIZE; i++) {
       terminateHServerWithLogs(0, i);
     }
     Assertions.assertThrows(Exception.class, hStreamClient::listStreams);
