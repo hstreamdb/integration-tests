@@ -8,7 +8,6 @@ import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randText;
 import static io.hstream.testing.TestUtils.waitFutures;
 
-import com.google.protobuf.Empty;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
