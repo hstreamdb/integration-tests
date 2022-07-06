@@ -59,7 +59,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     List<TestUtils.HServerCliOpts> hserverConfs = new ArrayList<>(CLUSTER_SIZE);
     for (int i = 0; i < CLUSTER_SIZE; ++i) {
       int offset = count.incrementAndGet();
-      int hServerPort = 1234 + offset;
+      int hServerPort = 6570 + offset;
       int hServerInnerPort = 65000 + offset;
       TestUtils.HServerCliOpts options = new TestUtils.HServerCliOpts();
       options.serverId = offset;
