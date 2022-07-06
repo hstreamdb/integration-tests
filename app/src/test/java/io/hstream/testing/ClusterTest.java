@@ -106,6 +106,7 @@ public class ClusterTest {
         io.hstream.internal.Stream.newBuilder()
             .setStreamName(stream)
             .setReplicationFactor(1)
+            .setShardCount(1)
             .build();
     var fs = stubs.stream().map(s -> s.createStream(req)).collect(Collectors.toList());
     var es = waitFutures(fs);
@@ -167,20 +168,6 @@ public class ClusterTest {
             .lookupStream(LookupStreamRequest.newBuilder().setStreamName(stream).build())
             .get()
             .getServerNode());
-  }
-
-  @Test
-  @Timeout(60)
-  void testLookupDeletedStream() throws Throwable {
-    var stream = randStream(stubs.get(0)).get().getStreamName();
-    stubs.get(1).deleteStream(DeleteStreamRequest.newBuilder().setStreamName(stream).build()).get();
-    Assertions.assertThrows(
-        Exception.class,
-        () ->
-            stubs
-                .get(2)
-                .lookupStream(LookupStreamRequest.newBuilder().setStreamName(stream).build())
-                .get());
   }
 
   // --------------------------------------------------------------------------------------------

@@ -96,13 +96,20 @@ public class TestUtils {
 
   public static String randStream(HStreamClient c) {
     String streamName = "test_stream_" + randText();
-    c.createStream(streamName, (short) 3);
+    Random rand = new Random();
+    int shardCnt = Math.max(1, rand.nextInt(5));
+    c.createStream(streamName, (short) 3, shardCnt);
     return streamName;
   }
 
   public static ListenableFuture<Stream> randStream(HStreamApiGrpc.HStreamApiFutureStub stub) {
     String streamName = "test_stream_" + randText();
-    var req = Stream.newBuilder().setStreamName(streamName).setReplicationFactor(3).build();
+    var req =
+        Stream.newBuilder()
+            .setStreamName(streamName)
+            .setReplicationFactor(3)
+            .setShardCount(1)
+            .build();
     return stub.createStream(req);
   }
 
@@ -111,6 +118,7 @@ public class TestUtils {
     String subscriptionName = "test_subscription_" + randText();
     Subscription subscription =
         Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
+            .offset(Subscription.SubscriptionOffset.EARLEST)
             .ackTimeoutSeconds(timeout)
             .build();
     c.createSubscription(subscription);
@@ -120,7 +128,9 @@ public class TestUtils {
   public static String randSubscription(HStreamClient c, String streamName) {
     final String subscriptionName = "test_subscription_" + randText();
     Subscription subscription =
-        Subscription.newBuilder().subscription(subscriptionName).stream(streamName).build();
+        Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
+            .offset(Subscription.SubscriptionOffset.EARLEST)
+            .build();
     c.createSubscription(subscription);
     return subscriptionName;
   }

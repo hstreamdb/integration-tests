@@ -155,7 +155,9 @@ public class Subscription {
     Assertions.assertEquals(0, client.listSubscriptions().size());
 
     client.createSubscription(
-        io.hstream.Subscription.newBuilder().subscription(subscription).stream(stream).build());
+        io.hstream.Subscription.newBuilder().subscription(subscription).stream(stream)
+            .offset(io.hstream.Subscription.SubscriptionOffset.EARLEST)
+            .build());
     List<byte[]> res2 = new ArrayList<>();
     consume(
         client,
