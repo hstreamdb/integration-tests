@@ -19,14 +19,13 @@ import io.hstream.Record;
 import io.hstream.Responder;
 import io.hstream.Subscription;
 import io.hstream.impl.DefaultSettings;
-import io.hstream.internal.AppendRequest;
-import io.hstream.internal.HStreamApiGrpc;
-import io.hstream.internal.HStreamRecord;
-import io.hstream.internal.HStreamRecordHeader;
+import io.hstream.internal.*;
 import io.hstream.internal.Stream;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -64,7 +63,7 @@ import org.testcontainers.utility.DockerImageName;
 public class TestUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
-  private static final DockerImageName defaultHstreamImageName =
+  private static final DockerImageName defaultHStreamImageName =
       DockerImageName.parse("hstreamdb/hstream:latest");
 
   public static String randText() {
@@ -141,12 +140,12 @@ public class TestUtils {
     return new GenericContainer<>(DockerImageName.parse("zookeeper")).withNetworkMode("host");
   }
 
-  private static DockerImageName getHstreamImageName() {
+  private static DockerImageName getHStreamImageName() {
     String hstreamImageName = System.getenv("HSTREAM_IMAGE_NAME");
     if (hstreamImageName == null || hstreamImageName.equals("")) {
       logger.info(
-          "No env variable HSTREAM_IMAGE_NAME found, use default name {}", defaultHstreamImageName);
-      return defaultHstreamImageName;
+          "No env variable HSTREAM_IMAGE_NAME found, use default name {}", defaultHStreamImageName);
+      return defaultHStreamImageName;
     } else {
       logger.info("Found env variable HSTREAM_IMAGE_NAME = {}", hstreamImageName);
       return DockerImageName.parse(hstreamImageName);
@@ -154,7 +153,7 @@ public class TestUtils {
   }
 
   public static GenericContainer<?> makeHStore(Path dataDir) {
-    return new GenericContainer<>(getHstreamImageName())
+    return new GenericContainer<>(getHStreamImageName())
         .withNetworkMode("host")
         .withFileSystemBind(
             dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_WRITE)
@@ -201,7 +200,7 @@ public class TestUtils {
       String hstoreHost,
       int serverId,
       SecurityOptions securityOptions) {
-    return new GenericContainer<>(getHstreamImageName())
+    return new GenericContainer<>(getHStreamImageName())
         .withNetworkMode("host")
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
         .withFileSystemBind(securityOptions.dir, "/data/security", BindMode.READ_ONLY)
@@ -234,6 +233,96 @@ public class TestUtils {
                 + " --store-log-level "
                 + "error")
         .waitingFor(Wait.forLogMessage(".*Server is started on port.*", 1));
+  }
+
+  public static GenericContainer<?> makeHServer(
+      HServerCliOpts hserverConf, String seedNodes, Path dataDir) {
+    return new GenericContainer<>(getHStreamImageName())
+        .withNetworkMode("host")
+        .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
+        .withFileSystemBind(hserverConf.securityOptions.dir, "/data/security", BindMode.READ_ONLY)
+        .withCommand(
+            "bash", "-c", " hstream-server" + hserverConf.toString() + " --seed-nodes " + seedNodes)
+        .waitingFor(Wait.forLogMessage(".*Server is started on port.*", 1));
+  }
+
+  static class HServerCliOpts {
+    public int serverId;
+    public String address;
+    public int port;
+    public int internalPort;
+    public String zkHost;
+
+    public SecurityOptions securityOptions;
+
+    public ServerNode toNode() {
+      return ServerNode.newBuilder().setId(serverId).setHost(address).setPort(port).build();
+    }
+
+    public String toString() {
+      return " --host "
+          + "127.0.0.1 "
+          + " --port "
+          + port
+          + " --internal-port "
+          + internalPort
+          + " --address "
+          + address
+          + " --server-id "
+          + serverId
+          + " --zkuri "
+          + zkHost
+          + ":2181"
+          + " --store-config "
+          + "/data/hstore/logdevice.conf "
+          + " --store-admin-port "
+          + "6440"
+          + " --log-level "
+          + "debug"
+          + securityOptions
+          + " --log-with-color"
+          + " --store-log-level "
+          + "error";
+    }
+  }
+
+  public static HServerCliOpts makeHServerCliOpts(
+      AtomicInteger count, SecurityOptions securityOptions) throws IOException {
+    HServerCliOpts options = new HServerCliOpts();
+    options.serverId = count.incrementAndGet();
+    ServerSocket socket = new ServerSocket(0);
+    ServerSocket socket2 = new ServerSocket(0);
+    options.port = socket.getLocalPort();
+    socket.close();
+    options.internalPort = socket2.getLocalPort();
+    socket2.close();
+    options.address = "127.0.0.1";
+    options.zkHost = "127.0.0.1";
+    options.securityOptions = securityOptions;
+    return options;
+  }
+
+  public static List<GenericContainer<?>> bootstrapHServerCluster(
+      List<HServerCliOpts> hserverConfs, String seedNodes, Path dataDir)
+      throws IOException, InterruptedException {
+    List<GenericContainer<?>> hServers = new ArrayList<>();
+    for (HServerCliOpts hserverConf : hserverConfs) {
+      var hServer = makeHServer(hserverConf, seedNodes, dataDir);
+      hServers.add(hServer);
+    }
+    hServers.stream().parallel().forEach(GenericContainer::start);
+    var res =
+        hServers
+            .get(0)
+            .execInContainer(
+                "bash",
+                "-c",
+                "hstream --host "
+                    + hserverConfs.get(0).address
+                    + " --port "
+                    + hserverConfs.get(0).port
+                    + " init ");
+    return hServers;
   }
 
   // -----------------------------------------------------------------------------------------------

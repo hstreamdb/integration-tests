@@ -1,13 +1,6 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.makeClient;
-import static io.hstream.testing.TestUtils.makeHServer;
-import static io.hstream.testing.TestUtils.makeHStore;
-import static io.hstream.testing.TestUtils.makeZooKeeper;
-import static io.hstream.testing.TestUtils.printBeginFlag;
-import static io.hstream.testing.TestUtils.printEndFlag;
-import static io.hstream.testing.TestUtils.silence;
-import static io.hstream.testing.TestUtils.writeLog;
+import static io.hstream.testing.TestUtils.*;
 
 import io.hstream.HStreamClient;
 import java.nio.file.Files;
@@ -16,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -26,9 +20,12 @@ import org.testcontainers.containers.GenericContainer;
 public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
   static final int CLUSTER_SIZE = 3;
+  private static final AtomicInteger count = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(ClusterExtension.class);
   private final List<GenericContainer<?>> hServers = new ArrayList<>(CLUSTER_SIZE);
   private final List<String> hServerUrls = new ArrayList<>(CLUSTER_SIZE);
+  private final List<String> hServerInnerUrls = new ArrayList<>(CLUSTER_SIZE);
+  private String seedNodes;
   private Path dataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> hstore;
@@ -59,27 +56,31 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     logger.debug("hstoreHost: " + hstoreHost);
 
     String hServerAddress = "127.0.0.1";
+    List<TestUtils.HServerCliOpts> hserverConfs = new ArrayList<>(CLUSTER_SIZE);
     for (int i = 0; i < CLUSTER_SIZE; ++i) {
-      int hServerPort = 6570 + i;
-      int hServerInnerPort = 65000 + i;
-      var hServer =
-          makeHServer(
-              hServerAddress,
-              hServerPort,
-              hServerInnerPort,
-              dataDir,
-              zkHost,
-              hstoreHost,
-              i,
-              securityOptions);
-      hServer.start();
-      hServers.add(hServer);
+      int offset = count.incrementAndGet();
+      int hServerPort = 1234 + offset;
+      int hServerInnerPort = 65000 + offset;
+      TestUtils.HServerCliOpts options = new TestUtils.HServerCliOpts();
+      options.serverId = offset;
+      options.port = hServerPort;
+      options.internalPort = hServerInnerPort;
+      options.address = hServerAddress;
+      options.zkHost = zkHost;
+      options.securityOptions = securityOptions;
+      hserverConfs.add(options);
       hServerUrls.add(hServerAddress + ":" + hServerPort);
+      hServerInnerUrls.add(hServerAddress + ":" + hServerInnerPort);
     }
+    seedNodes = hServerInnerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
+    hServers.addAll(bootstrapHServerCluster(hserverConfs, seedNodes, dataDir));
+    hServers.stream().forEach(h -> logger.info(h.getLogs()));
     Thread.sleep(3000);
 
     Object testInstance = context.getRequiredTestInstance();
     var initUrl = hServerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
+    client = makeClient(initUrl, context.getTags());
+
     silence(
         () ->
             testInstance
@@ -87,7 +88,30 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
                 .getMethod("setHStreamDBUrl", String.class)
                 .invoke(testInstance, initUrl));
 
-    client = makeClient(initUrl, context.getTags());
+    silence(
+        () ->
+            testInstance
+                .getClass()
+                .getMethod("setCount", AtomicInteger.class)
+                .invoke(testInstance, count));
+    silence(
+        () ->
+            testInstance
+                .getClass()
+                .getMethod("setSecurityOptions", SecurityOptions.class)
+                .invoke(testInstance, securityOptions));
+    silence(
+        () ->
+            testInstance
+                .getClass()
+                .getMethod("setSeedNodes", String.class)
+                .invoke(testInstance, seedNodes));
+    silence(
+        () ->
+            testInstance
+                .getClass()
+                .getMethod("setDataDir", Path.class)
+                .invoke(testInstance, dataDir));
     silence(
         () ->
             testInstance
@@ -136,7 +160,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
     hServers.clear();
     hServerUrls.clear();
-
+    hServerInnerUrls.clear();
+    count.set(0);
     writeLog(context, "hstore", grp, hstore.getLogs());
     hstore.close();
     writeLog(context, "zk", grp, zk.getLogs());
