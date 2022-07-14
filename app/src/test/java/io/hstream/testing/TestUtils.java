@@ -49,6 +49,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.bouncycastle.util.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -94,9 +95,13 @@ public class TestUtils {
   }
 
   public static String randStream(HStreamClient c) {
-    String streamName = "test_stream_" + randText();
     Random rand = new Random();
     int shardCnt = Math.max(1, rand.nextInt(5));
+    return randStream(c, shardCnt);
+  }
+
+  public static String randStream(HStreamClient c, int shardCnt) {
+    String streamName = "test_stream_" + randText();
     c.createStream(streamName, (short) 3, shardCnt);
     return streamName;
   }
@@ -584,6 +589,11 @@ public class TestUtils {
     public String toString() {
       return "RecordsPair{" + "ids count=" + ids.size() + ", records count=" + records.size() + '}';
     }
+
+    public void extend(RecordsPair other) {
+      ids.addAll(other.ids);
+      records.addAll(other.records);
+    }
   }
 
   public static RecordsPair produce(Producer producer, int payloadSize, int count) {
@@ -935,5 +945,9 @@ public class TestUtils {
         Assertions.fail("invalid Grpc Exception", e);
       }
     }
+  }
+
+  public static void assertShardId(List<String> ids) {
+    Assertions.assertEquals(1, ids.stream().map(s -> Strings.split(s, '-')[2]).distinct().count());
   }
 }

@@ -1,5 +1,6 @@
 package io.hstream.testing;
 
+import static io.hstream.testing.TestUtils.*;
 import static io.hstream.testing.TestUtils.consume;
 import static io.hstream.testing.TestUtils.consumeAsync;
 import static io.hstream.testing.TestUtils.diffAndLogResultSets;
@@ -12,6 +13,7 @@ import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
 import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
 
+import io.hstream.BatchSetting;
 import io.hstream.BufferedProducer;
 import io.hstream.HStreamClient;
 import io.hstream.Producer;
@@ -41,6 +43,57 @@ public class Partition {
 
   public void setClient(HStreamClient client) {
     this.client = client;
+  }
+
+  @Test
+  @Timeout(60)
+  void testWriteToMultiPartition() throws Throwable {
+    int ShardCnt = 5;
+    int threadCount = 10;
+    int count = 1000;
+    int keys = 16;
+    String streamName = randStream(client, ShardCnt);
+    BufferedProducer producer =
+        client.newBufferedProducer().stream(streamName)
+            .batchSetting(BatchSetting.newBuilder().recordCountLimit(100).ageLimit(10).build())
+            .build();
+    var produced = new HashMap<String, TestUtils.RecordsPair>();
+    assertExceptions(
+        runWithThreads(
+            threadCount,
+            () -> {
+              var pairs = produce(producer, 128, count, new RandomKeyGenerator(keys));
+              synchronized (produced) {
+                for (var p : pairs.entrySet()) {
+                  if (!produced.containsKey(p.getKey())) {
+                    produced.put(p.getKey(), new RecordsPair());
+                  }
+                  produced.get(p.getKey()).extend(p.getValue());
+                }
+              }
+            }));
+    producer.close();
+    // check same key should be appended to same shard
+    produced.forEach((k, v) -> assertShardId(v.ids));
+    String subscription = randSubscription(client, streamName);
+    var received = new HashMap<String, TestUtils.RecordsPair>(keys);
+    AtomicInteger receivedCount = new AtomicInteger();
+    consume(
+        client,
+        subscription,
+        streamName,
+        20,
+        receivedRawRecord -> {
+          var key = receivedRawRecord.getHeader().getOrderingKey();
+          if (!received.containsKey(key)) {
+            received.put(key, new TestUtils.RecordsPair());
+          }
+          received.get(key).ids.add(receivedRawRecord.getRecordId());
+          received.get(key).records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
+          return receivedCount.incrementAndGet() < count * threadCount;
+        });
+    // check all appended records should be fetched.
+    Assertions.assertTrue(diffAndLogResultSets(produced, received));
   }
 
   @Test
@@ -224,13 +277,13 @@ public class Partition {
     var f2 = consumeAsync(client, subscription, handleForKeys(received, signal));
     var f3 = consumeAsync(client, subscription, handleForKeys(received, signal));
 
-    while (signal.getCount() > count / 2) {
-      Thread.sleep(100);
+    while (signal.getCount() > count / 3) {
+      Thread.sleep(10);
     }
     f1.complete(null);
 
-    while (signal.getCount() > count / 3) {
-      Thread.sleep(100);
+    while (signal.getCount() > count / 2) {
+      Thread.sleep(10);
     }
     f2.complete(null);
 
