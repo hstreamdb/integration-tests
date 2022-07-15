@@ -12,6 +12,7 @@ import static io.hstream.testing.TestUtils.produce;
 import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
 import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
+import static io.hstream.testing.TestUtils.receiveNRawRecords;
 
 import io.hstream.BatchSetting;
 import io.hstream.BufferedProducer;
@@ -57,21 +58,9 @@ public class Partition {
         client.newBufferedProducer().stream(streamName)
             .batchSetting(BatchSetting.newBuilder().recordCountLimit(100).ageLimit(10).build())
             .build();
-    var produced = new HashMap<String, TestUtils.RecordsPair>();
-    assertExceptions(
-        runWithThreads(
-            threadCount,
-            () -> {
-              var pairs = produce(producer, 128, count, new RandomKeyGenerator(keys));
-              synchronized (produced) {
-                for (var p : pairs.entrySet()) {
-                  if (!produced.containsKey(p.getKey())) {
-                    produced.put(p.getKey(), new RecordsPair());
-                  }
-                  produced.get(p.getKey()).extend(p.getValue());
-                }
-              }
-            }));
+    HashMap<String, TestUtils.RecordsPair> produced =
+        batchAppendConcurrentlyWithRandomKey(
+            producer, threadCount, count, 128, new RandomKeyGenerator(keys));
     producer.close();
     // check same key should be appended to same shard
     produced.forEach((k, v) -> assertShardId(v.ids));
@@ -83,15 +72,7 @@ public class Partition {
         subscription,
         streamName,
         20,
-        receivedRawRecord -> {
-          var key = receivedRawRecord.getHeader().getOrderingKey();
-          if (!received.containsKey(key)) {
-            received.put(key, new TestUtils.RecordsPair());
-          }
-          received.get(key).ids.add(receivedRawRecord.getRecordId());
-          received.get(key).records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-          return receivedCount.incrementAndGet() < count * threadCount;
-        });
+        receiveNRawRecords(count * threadCount, received, receivedCount));
     // check all appended records should be fetched.
     Assertions.assertTrue(diffAndLogResultSets(produced, received));
   }
@@ -132,19 +113,7 @@ public class Partition {
     var received = new HashMap<String, TestUtils.RecordsPair>(keys);
     AtomicInteger receivedCount = new AtomicInteger();
     consume(
-        client,
-        subscription,
-        streamName,
-        10,
-        receivedRawRecord -> {
-          var key = receivedRawRecord.getHeader().getOrderingKey();
-          if (!received.containsKey(key)) {
-            received.put(key, new TestUtils.RecordsPair());
-          }
-          received.get(key).ids.add(receivedRawRecord.getRecordId());
-          received.get(key).records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-          return receivedCount.incrementAndGet() < count;
-        });
+        client, subscription, streamName, 10, receiveNRawRecords(count, received, receivedCount));
     Assertions.assertEquals(pairs, received);
   }
 
@@ -161,19 +130,7 @@ public class Partition {
     var received = new HashMap<String, TestUtils.RecordsPair>(keys);
     AtomicInteger receivedCount = new AtomicInteger();
     consume(
-        client,
-        subscription,
-        streamName,
-        10,
-        receivedRawRecord -> {
-          var key = receivedRawRecord.getHeader().getOrderingKey();
-          if (!received.containsKey(key)) {
-            received.put(key, new TestUtils.RecordsPair());
-          }
-          received.get(key).ids.add(receivedRawRecord.getRecordId());
-          received.get(key).records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-          return receivedCount.incrementAndGet() < count;
-        });
+        client, subscription, streamName, 10, receiveNRawRecords(count, received, receivedCount));
     Assertions.assertTrue(diffAndLogResultSets(pairs, received));
   }
 

@@ -29,15 +29,7 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Random;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -354,14 +346,20 @@ public class TestUtils {
     List<io.hstream.Stream> streams = client.listStreams();
     Assertions.assertEquals(sizeExpected, streams.size());
     Assertions.assertTrue(
-        streams.stream().map(s -> s.getStreamName()).collect(Collectors.toList()).contains(stream));
+        streams.stream()
+            .map(io.hstream.Stream::getStreamName)
+            .collect(Collectors.toList())
+            .contains(stream));
   }
 
   public static void deleteStreamSucceeds(HStreamClient client, int sizeExpected, String stream) {
     List<io.hstream.Stream> streams = client.listStreams();
     Assertions.assertEquals(sizeExpected, streams.size());
     Assertions.assertFalse(
-        streams.stream().map(s -> s.getStreamName()).collect(Collectors.toList()).contains(stream));
+        streams.stream()
+            .map(io.hstream.Stream::getStreamName)
+            .collect(Collectors.toList())
+            .contains(stream));
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -494,26 +492,13 @@ public class TestUtils {
             }),
         new ScheduledThreadPoolExecutor(1));
     consumer.startAsync().awaitRunning();
-    return future.whenCompleteAsync(
-        (x, y) -> {
-          consumer.stopAsync().awaitTerminated();
-        });
+    return future.whenCompleteAsync((x, y) -> consumer.stopAsync().awaitTerminated());
   }
 
   public static Function<ReceivedRawRecord, Boolean> handleForKeysSync(
       HashMap<String, RecordsPair> pairs, int count) {
     var received = new AtomicInteger(0);
-    return r -> {
-      synchronized (pairs) {
-        var key = r.getHeader().getOrderingKey();
-        if (!pairs.containsKey(key)) {
-          pairs.put(key, new RecordsPair());
-        }
-        pairs.get(key).ids.add(r.getRecordId());
-        pairs.get(key).records.add(Arrays.toString(r.getRawRecord()));
-      }
-      return received.incrementAndGet() < count;
-    };
+    return receiveNRawRecords(count, pairs, received);
   }
 
   public static Function<ReceivedRawRecord, Boolean> handleForKeys(
@@ -521,11 +506,9 @@ public class TestUtils {
     return r -> {
       synchronized (pairs) {
         var key = r.getHeader().getOrderingKey();
-        if (!pairs.containsKey(key)) {
-          pairs.put(key, new RecordsPair());
-        }
-        pairs.get(key).ids.add(r.getRecordId());
-        pairs.get(key).records.add(Arrays.toString(r.getRawRecord()));
+        pairs
+            .computeIfAbsent(key, v -> new RecordsPair())
+            .insert(r.getRecordId(), Arrays.toString(r.getRawRecord()));
         latch.countDown();
         return latch.getCount() > 0;
       }
@@ -593,6 +576,11 @@ public class TestUtils {
     public void extend(RecordsPair other) {
       ids.addAll(other.ids);
       records.addAll(other.records);
+    }
+
+    public void insert(String id, String record) {
+      ids.add(id);
+      records.add(record);
     }
   }
 
@@ -949,5 +937,37 @@ public class TestUtils {
 
   public static void assertShardId(List<String> ids) {
     Assertions.assertEquals(1, ids.stream().map(s -> Strings.split(s, '-')[2]).distinct().count());
+  }
+
+  public static HashMap<String, RecordsPair> batchAppendConcurrentlyWithRandomKey(
+      BufferedProducer producer,
+      int threadCount,
+      int recordCnt,
+      int payloadSize,
+      RandomKeyGenerator keys)
+      throws InterruptedException {
+    var produced = new HashMap<String, TestUtils.RecordsPair>();
+    runWithThreads(
+        threadCount,
+        () -> {
+          var pairs = produce(producer, payloadSize, recordCnt, keys);
+          synchronized (produced) {
+            pairs.forEach(
+                (k, v) -> produced.computeIfAbsent(k, value -> new RecordsPair()).extend(v));
+          }
+        });
+    return produced;
+  }
+
+  public static Function<ReceivedRawRecord, Boolean> receiveNRawRecords(
+      int count, HashMap<String, RecordsPair> received, AtomicInteger receivedCount) {
+    return receivedRawRecord -> {
+      var key = receivedRawRecord.getHeader().getOrderingKey();
+      received
+          .computeIfAbsent(key, v -> new RecordsPair())
+          .insert(
+              receivedRawRecord.getRecordId(), Arrays.toString(receivedRawRecord.getRawRecord()));
+      return receivedCount.incrementAndGet() < count;
+    };
   }
 }

@@ -159,8 +159,9 @@ public class Consumer {
             "c1",
             receivedRawRecord -> {
               synchronized (received) {
-                received.ids.add(receivedRawRecord.getRecordId());
-                received.records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
+                received.insert(
+                    receivedRawRecord.getRecordId(),
+                    Arrays.toString(receivedRawRecord.getRawRecord()));
                 return true;
               }
             },
