@@ -47,6 +47,23 @@ public class Partition {
   }
 
   @Test
+  @Timeout(10)
+  void testListShards() throws Throwable {
+    int ShardCnt = 5;
+    String streamName = randStream(client, ShardCnt);
+    var shards = client.listShards(streamName);
+    Assertions.assertEquals(shards.size(), ShardCnt);
+    // listShards should be an idempotent API
+    assertExceptions(
+        runWithThreads(
+            5,
+            () -> {
+              var res = client.listShards(streamName);
+              Assertions.assertEquals(shards, res);
+            }));
+  }
+
+  @Test
   @Timeout(60)
   void testWriteToMultiPartition() throws Throwable {
     int ShardCnt = 5;
