@@ -2,17 +2,9 @@ package io.hstream.testing;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Service;
-import io.hstream.BatchSetting;
-import io.hstream.BufferedProducer;
+import io.hstream.*;
 import io.hstream.Consumer;
-import io.hstream.HRecord;
-import io.hstream.HStreamClient;
-import io.hstream.HStreamClientBuilder;
 import io.hstream.Producer;
-import io.hstream.ReceivedHRecord;
-import io.hstream.ReceivedRawRecord;
-import io.hstream.Record;
-import io.hstream.Responder;
 import io.hstream.Subscription;
 import io.hstream.impl.DefaultSettings;
 import io.hstream.internal.*;
@@ -924,5 +916,56 @@ public class TestUtils {
               receivedRawRecord.getRecordId(), Arrays.toString(receivedRawRecord.getRawRecord()));
       return receivedCount.incrementAndGet() < count;
     };
+  }
+
+  public static List<Record> readStreamShards(
+      HStreamClient client,
+      int ShardCnt,
+      String streamName,
+      int totalRead,
+      ArrayList<Thread> rids,
+      StreamShardOffset offset) {
+    var shards = client.listShards(streamName);
+
+    var terminate = new AtomicBoolean(false);
+    var readRes = new ArrayList<Record>();
+    for (int i = 0; i < ShardCnt; i++) {
+      var reader =
+          client
+              .newReader()
+              .readerId("reader_" + i)
+              .streamName(streamName)
+              .shardId(shards.get(i).getShardId())
+              .shardOffset(offset)
+              .timeoutMs(100)
+              .build();
+      var rid =
+          new Thread(
+              () -> {
+                while (!terminate.get()) {
+                  reader
+                      .read(1000)
+                      .thenApply(
+                          records -> {
+                            synchronized (readRes) {
+                              readRes.addAll(records);
+                              if (readRes.size() >= totalRead) {
+                                terminate.set(true);
+                              }
+                            }
+                            return null;
+                          });
+
+                  try {
+                    Thread.sleep(1000);
+                  } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                  }
+                }
+              });
+      rids.add(rid);
+    }
+
+    return readRes;
   }
 }
