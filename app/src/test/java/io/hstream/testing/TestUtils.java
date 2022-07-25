@@ -478,7 +478,7 @@ public class TestUtils {
       HashMap<String, RecordsPair> pairs, CountDownLatch latch) {
     return r -> {
       synchronized (pairs) {
-        var key = r.getHeader().getOrderingKey();
+        var key = r.getHeader().getPartitionKey();
         pairs
             .computeIfAbsent(key, v -> new RecordsPair())
             .insert(r.getRecordId(), Arrays.toString(r.getRawRecord()));
@@ -558,7 +558,7 @@ public class TestUtils {
   }
 
   public static RecordsPair produce(Producer producer, int payloadSize, int count) {
-    return produce(producer, payloadSize, count, DefaultSettings.DEFAULT_ORDERING_KEY);
+    return produce(producer, payloadSize, count, DefaultSettings.DEFAULT_PARTITION_KEY);
   }
 
   public static HashMap<String, RecordsPair> produce(
@@ -632,7 +632,7 @@ public class TestUtils {
     for (int i = 0; i < totalCount; i++) {
       var key = kg.get();
       rand.nextBytes(rRec);
-      Record recordToWrite = Record.newBuilder().orderingKey(key).rawRecord(rRec).build();
+      Record recordToWrite = Record.newBuilder().partitionKey(key).rawRecord(rRec).build();
       if (!futures.containsKey(key)) {
         futures.put(key, new LinkedList<>());
         records.put(key, new LinkedList<>());
@@ -676,7 +676,7 @@ public class TestUtils {
       byte[] rRec = new byte[size];
       return Record.newBuilder()
           .rawRecord(rRec)
-          .orderingKey(DefaultSettings.DEFAULT_ORDERING_KEY)
+          .partitionKey(DefaultSettings.DEFAULT_PARTITION_KEY)
           .build();
     }
   }
@@ -687,7 +687,7 @@ public class TestUtils {
     var futures = new HashMap<String, List<CompletableFuture<String>>>();
     for (int i = 0; i < count; i++) {
       var record = rg.get();
-      var key = record.getOrderingKey();
+      var key = record.getPartitionKey();
       if (record.isRawRecord()) {
         records.add(Arrays.toString(record.getRawRecord()));
       } else {
@@ -799,7 +799,7 @@ public class TestUtils {
   public static ArrayList<String> generateKeysIncludingDefaultKey(int size) {
     assert size > 0;
     var res = new ArrayList<String>(size);
-    res.add(DefaultSettings.DEFAULT_ORDERING_KEY);
+    res.add(DefaultSettings.DEFAULT_PARTITION_KEY);
     for (int i = 1; i < size; i++) {
       res.add("test_key_" + i);
     }
@@ -917,7 +917,7 @@ public class TestUtils {
   public static Function<ReceivedRawRecord, Boolean> receiveNRawRecords(
       int count, HashMap<String, RecordsPair> received, AtomicInteger receivedCount) {
     return receivedRawRecord -> {
-      var key = receivedRawRecord.getHeader().getOrderingKey();
+      var key = receivedRawRecord.getHeader().getPartitionKey();
       received
           .computeIfAbsent(key, v -> new RecordsPair())
           .insert(

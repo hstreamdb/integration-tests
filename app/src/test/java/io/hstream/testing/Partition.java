@@ -260,7 +260,9 @@ public class Partition {
     int count = 200;
     byte[] rRec = new byte[100];
     for (int i = 0; i < count; i++) {
-      producer.write(Record.newBuilder().rawRecord(rRec).orderingKey("k_" + i % 10).build()).join();
+      producer
+          .write(Record.newBuilder().rawRecord(rRec).partitionKey("k_" + i % 10).build())
+          .join();
     }
     CountDownLatch signal = new CountDownLatch(count);
     // start 5 consumers
@@ -359,7 +361,7 @@ public class Partition {
               receivedRawRecord -> {
                 synchronized (keys) {
                   records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-                  keys.add(receivedRawRecord.getHeader().getOrderingKey());
+                  keys.add(receivedRawRecord.getHeader().getPartitionKey());
                   latch.countDown();
                   return true;
                 }
