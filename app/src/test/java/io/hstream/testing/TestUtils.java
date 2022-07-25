@@ -891,7 +891,7 @@ public class TestUtils {
   }
 
   public static void assertShardId(List<String> ids) {
-    Assertions.assertEquals(1, ids.stream().map(s -> Strings.split(s, '-')[2]).distinct().count());
+    Assertions.assertEquals(1, ids.stream().map(s -> Strings.split(s, '-')[0]).distinct().count());
   }
 
   public static HashMap<String, RecordsPair> batchAppendConcurrentlyWithRandomKey(
