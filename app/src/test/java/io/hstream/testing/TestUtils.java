@@ -83,7 +83,7 @@ public class TestUtils {
     String subscriptionName = "test_subscription_" + randText();
     Subscription subscription =
         Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
-            .offset(Subscription.SubscriptionOffset.EARLEST)
+            .offset(Subscription.SubscriptionOffset.EARLIEST)
             .ackTimeoutSeconds(timeout)
             .build();
     c.createSubscription(subscription);
@@ -94,7 +94,7 @@ public class TestUtils {
     final String subscriptionName = "test_subscription_" + randText();
     Subscription subscription =
         Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
-            .offset(Subscription.SubscriptionOffset.EARLEST)
+            .offset(Subscription.SubscriptionOffset.EARLIEST)
             .build();
     c.createSubscription(subscription);
     return subscriptionName;
