@@ -345,4 +345,124 @@ public class Consumer {
     consumer.stopAsync().awaitTerminated();
     Assertions.assertEquals(count, received.get());
   }
+
+  @Test
+  @Timeout(120)
+  //  (on the same stream & subscription)
+  //
+  //  0 --- 1 --- 2 -------- 9 --- 10 --- 11 ----- 16 ------ 21 ------ 26 -- 27 ------ 31
+  //  |<-       consumer_1       ->|
+  //  |     |<-        consumer_2       ->|        |<-   consumer_3  ->|
+  //                                                        |<-      consumer_4      ->|
+  //  |           |<-               produce 10 records every half second             ->|
+  //
+  void testLostMessage() throws Exception {
+    final String streamName = randStream(client);
+    final String subscriptionName = randSubscription(client, streamName);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 1);
+    final int write_times = 50;
+    final int each_count = 10;
+
+    var received_1 = new AtomicInteger(0);
+    var consumer_1 =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .ackBufferSize(100)
+            .ackAgeLimit(100)
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  received_1.incrementAndGet();
+                  responder.ack();
+                })
+            .build();
+
+    var received_2 = new AtomicInteger(0);
+    var consumer_2 =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .ackBufferSize(100)
+            .ackAgeLimit(100)
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  received_2.incrementAndGet();
+                  responder.ack();
+                })
+            .build();
+
+    var received_3 = new AtomicInteger(0);
+    var consumer_3 =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .ackBufferSize(100)
+            .ackAgeLimit(100)
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  received_3.incrementAndGet();
+                  responder.ack();
+                })
+            .build();
+
+    var received_4 = new AtomicInteger(0);
+    var consumer_4 =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .ackBufferSize(100)
+            .ackAgeLimit(100)
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  received_3.incrementAndGet();
+                  responder.ack();
+                })
+            .build();
+
+    consumer_1.startAsync().awaitRunning();
+    Thread.sleep(1000);
+    consumer_2.startAsync().awaitRunning();
+    Thread.sleep(1000);
+
+    Thread thread =
+        new Thread() {
+          public void run() {
+            try {
+              for (int i = 0; i < write_times; i++) {
+                doProduce(producer, 1024, each_count);
+                Thread.sleep(500);
+              }
+            } catch (InterruptedException e) {
+              System.out.println(e);
+            }
+          }
+        };
+    thread.start();
+
+    Thread.sleep(8000);
+    consumer_1.stopAsync().awaitTerminated();
+    Thread.sleep(1000);
+    consumer_2.stopAsync().awaitTerminated();
+    Thread.sleep(5000);
+    consumer_3.startAsync().awaitRunning();
+    Thread.sleep(5000);
+    consumer_4.startAsync().awaitRunning();
+    Thread.sleep(5000);
+    consumer_3.stopAsync().awaitTerminated();
+    Thread.sleep(5000);
+    consumer_4.stopAsync().awaitTerminated();
+    producer.close();
+    System.out.println(
+        "=============== "
+            + received_1.get()
+            + " "
+            + received_2.get()
+            + " "
+            + received_3.get()
+            + " "
+            + received_4.get());
+    Assertions.assertEquals(
+        write_times * each_count,
+        received_1.get() + received_2.get() + received_3.get() + received_4.get());
+  }
 }
