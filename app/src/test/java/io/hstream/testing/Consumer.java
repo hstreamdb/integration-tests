@@ -354,7 +354,7 @@ public class Consumer {
   //  |<-       consumer_1       ->|
   //  |     |<-        consumer_2       ->|        |<-   consumer_3  ->|
   //                                                        |<-      consumer_4      ->|
-  //  |           |<-               produce 10 records every half second             ->|
+  //  |           |<-        produce 10 records every half second          ->|
   //
   void testLostMessage() throws Exception {
     final String streamName = randStream(client);
