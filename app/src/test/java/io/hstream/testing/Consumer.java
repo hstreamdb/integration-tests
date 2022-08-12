@@ -4,8 +4,10 @@ import static io.hstream.testing.TestUtils.*;
 
 import io.hstream.BufferedProducer;
 import io.hstream.HStreamClient;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -358,12 +360,16 @@ public class Consumer {
   //
   void testLostMessage() throws Exception {
     final String streamName = randStream(client);
-    final String subscriptionName = randSubscription(client, streamName);
+    final String subscriptionName = randSubscriptionWithTimeout(client, streamName, 1);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 1);
     final int write_times = 50;
     final int each_count = 10;
+    var writeValue = new AtomicInteger(0);
 
-    var received_1 = new AtomicInteger(0);
+    TestUtils.RecordsPair pair = new TestUtils.RecordsPair();
+
+    var ids_1 = new ArrayList<String>(1000);
+    var recs_1 = new ArrayList<String>(1000);
     var consumer_1 =
         client
             .newConsumer()
@@ -372,12 +378,16 @@ public class Consumer {
             .ackAgeLimit(100)
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  received_1.incrementAndGet();
+                  ids_1.add(receivedRawRecord.getRecordId());
+                  ByteBuffer wrapped = ByteBuffer.wrap(receivedRawRecord.getRawRecord());
+                  int thisNum = wrapped.getInt();
+                  recs_1.add(String.valueOf(thisNum));
                   responder.ack();
                 })
             .build();
 
-    var received_2 = new AtomicInteger(0);
+    var ids_2 = new ArrayList<String>(1000);
+    var recs_2 = new ArrayList<String>(1000);
     var consumer_2 =
         client
             .newConsumer()
@@ -386,12 +396,16 @@ public class Consumer {
             .ackAgeLimit(100)
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  received_2.incrementAndGet();
+                  ids_2.add(receivedRawRecord.getRecordId());
+                  ByteBuffer wrapped = ByteBuffer.wrap(receivedRawRecord.getRawRecord());
+                  int thisNum = wrapped.getInt();
+                  recs_2.add(String.valueOf(thisNum));
                   responder.ack();
                 })
             .build();
 
-    var received_3 = new AtomicInteger(0);
+    var ids_3 = new ArrayList<String>(1000);
+    var recs_3 = new ArrayList<String>(1000);
     var consumer_3 =
         client
             .newConsumer()
@@ -400,12 +414,16 @@ public class Consumer {
             .ackAgeLimit(100)
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  received_3.incrementAndGet();
+                  ids_3.add(receivedRawRecord.getRecordId());
+                  ByteBuffer wrapped = ByteBuffer.wrap(receivedRawRecord.getRawRecord());
+                  int thisNum = wrapped.getInt();
+                  recs_3.add(String.valueOf(thisNum));
                   responder.ack();
                 })
             .build();
 
-    var received_4 = new AtomicInteger(0);
+    var ids_4 = new ArrayList<String>(1000);
+    var recs_4 = new ArrayList<String>(1000);
     var consumer_4 =
         client
             .newConsumer()
@@ -414,7 +432,10 @@ public class Consumer {
             .ackAgeLimit(100)
             .rawRecordReceiver(
                 (receivedRawRecord, responder) -> {
-                  received_3.incrementAndGet();
+                  ids_4.add(receivedRawRecord.getRecordId());
+                  ByteBuffer wrapped = ByteBuffer.wrap(receivedRawRecord.getRawRecord());
+                  int thisNum = wrapped.getInt();
+                  recs_4.add(String.valueOf(thisNum));
                   responder.ack();
                 })
             .build();
@@ -429,7 +450,8 @@ public class Consumer {
           public void run() {
             try {
               for (int i = 0; i < write_times; i++) {
-                doProduce(producer, 1024, each_count);
+                TestUtils.RecordsPair thisPair = produce(producer, writeValue, each_count);
+                pair.extend(thisPair);
                 Thread.sleep(500);
               }
             } catch (InterruptedException e) {
@@ -452,17 +474,38 @@ public class Consumer {
     Thread.sleep(5000);
     consumer_4.stopAsync().awaitTerminated();
     producer.close();
-    System.out.println(
-        "=============== "
-            + received_1.get()
-            + " "
-            + received_2.get()
-            + " "
-            + received_3.get()
-            + " "
-            + received_4.get());
-    Assertions.assertEquals(
-        write_times * each_count,
-        received_1.get() + received_2.get() + received_3.get() + received_4.get());
+
+    var readIds = new ArrayList<String>();
+    var readRecs = new ArrayList<String>();
+    readIds.addAll(ids_1);
+    readIds.addAll(ids_2);
+    readIds.addAll(ids_3);
+    readIds.addAll(ids_4);
+
+    readRecs.addAll(recs_1);
+    readRecs.addAll(recs_2);
+    readRecs.addAll(recs_3);
+    readRecs.addAll(recs_4);
+
+    var writeIds = new ArrayList<String>(pair.ids);
+    var writeRecs = new ArrayList<String>(pair.records);
+
+    System.out.println("============== Write ===============");
+    System.out.println("len=" + writeRecs.size() + ": " + writeRecs);
+    System.out.println("==============  Read ===============");
+    System.out.println("len=" + (recs_1.size() + recs_2.size() + recs_3.size() + recs_4.size()));
+    System.out.println("len=" + recs_1.size() + ", Consumer 1: " + recs_1);
+    System.out.println("len=" + recs_2.size() + ", Consumer 2: " + recs_2);
+    System.out.println("len=" + recs_3.size() + ", Consumer 3: " + recs_3);
+    System.out.println("len=" + recs_4.size() + ", Consumer 4: " + recs_4);
+
+    Collections.sort(writeIds);
+    Collections.sort(readIds);
+
+    Collections.sort(writeRecs);
+    Collections.sort(readRecs);
+
+    Assertions.assertEquals(writeIds, readIds);
+    Assertions.assertEquals(writeRecs, readRecs);
   }
 }

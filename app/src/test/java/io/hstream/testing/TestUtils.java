@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -644,6 +645,54 @@ public class TestUtils {
           res.put(key, p);
         });
     return res;
+  }
+
+  public static HashMap<String, RecordsPair> produce(
+      Producer producer, AtomicInteger value, int totalCount, KeyGenerator kg) {
+    assert totalCount > 0;
+    var records = new HashMap<String, LinkedList<String>>();
+    var futures = new HashMap<String, List<CompletableFuture<String>>>();
+    for (int i = 0; i < totalCount; i++) {
+      var key = kg.get();
+      var thisValue = value.getAndIncrement();
+      ByteBuffer b = ByteBuffer.allocate(4);
+      b.putInt(thisValue);
+      byte[] rRec = b.array();
+      Record recordToWrite = Record.newBuilder().partitionKey(key).rawRecord(rRec).build();
+      if (!futures.containsKey(key)) {
+        futures.put(key, new LinkedList<>());
+        records.put(key, new LinkedList<>());
+      }
+      futures.get(key).add(producer.write(recordToWrite));
+      ByteBuffer wrapped = ByteBuffer.wrap(rRec);
+      int thisNum = wrapped.getInt();
+      records.get(key).add(String.valueOf(thisNum));
+    }
+
+    var res = new HashMap<String, RecordsPair>();
+    futures.forEach(
+        (key, v) -> {
+          RecordsPair p = new RecordsPair();
+          p.records = records.get(key);
+          var ids = new LinkedList<String>();
+          v.forEach(x -> ids.add(x.join()));
+          p.ids = ids;
+          res.put(key, p);
+        });
+    return res;
+  }
+
+  public static HashMap<String, RecordsPair> produce(
+      Producer producer, AtomicInteger value, int totalCount, int keysSize) {
+    return produce(producer, value, totalCount, new RobinRoundKeyGenerator(keysSize));
+  }
+
+  public static RecordsPair produce(Producer producer, AtomicInteger value, int count, String key) {
+    return produce(producer, value, count, () -> key).get(key);
+  }
+
+  public static RecordsPair produce(Producer producer, AtomicInteger value, int count) {
+    return produce(producer, value, count, DefaultSettings.DEFAULT_PARTITION_KEY);
   }
 
   @FunctionalInterface
