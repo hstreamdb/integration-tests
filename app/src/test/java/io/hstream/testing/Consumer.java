@@ -7,7 +7,7 @@ import io.hstream.HStreamClient;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -475,8 +475,8 @@ public class Consumer {
     consumer_4.stopAsync().awaitTerminated();
     producer.close();
 
-    var readIds = new ArrayList<String>();
-    var readRecs = new ArrayList<String>();
+    var readIds = new HashSet<String>();
+    var readRecs = new HashSet<String>();
     readIds.addAll(ids_1);
     readIds.addAll(ids_2);
     readIds.addAll(ids_3);
@@ -487,8 +487,8 @@ public class Consumer {
     readRecs.addAll(recs_3);
     readRecs.addAll(recs_4);
 
-    var writeIds = new ArrayList<String>(pair.ids);
-    var writeRecs = new ArrayList<String>(pair.records);
+    var writeIds = new HashSet<String>(pair.ids);
+    var writeRecs = new HashSet<String>(pair.records);
 
     System.out.println("============== Write ===============");
     System.out.println("len=" + writeRecs.size() + ": " + writeRecs);
@@ -498,12 +498,6 @@ public class Consumer {
     System.out.println("len=" + recs_2.size() + ", Consumer 2: " + recs_2);
     System.out.println("len=" + recs_3.size() + ", Consumer 3: " + recs_3);
     System.out.println("len=" + recs_4.size() + ", Consumer 4: " + recs_4);
-
-    Collections.sort(writeIds);
-    Collections.sort(readIds);
-
-    Collections.sort(writeRecs);
-    Collections.sort(readRecs);
 
     Assertions.assertEquals(writeIds, readIds);
     Assertions.assertEquals(writeRecs, readRecs);
