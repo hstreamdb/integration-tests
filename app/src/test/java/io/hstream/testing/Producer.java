@@ -14,6 +14,7 @@ import static io.hstream.testing.TestUtils.runWithThreads;
 
 import io.hstream.BatchSetting;
 import io.hstream.BufferedProducer;
+import io.hstream.CompressionType;
 import io.hstream.FlowControlSetting;
 import io.hstream.HRecord;
 import io.hstream.HStreamClient;
@@ -452,5 +453,61 @@ public class Producer {
 
     client.deleteStream(stream);
     Assertions.assertThrows(Exception.class, () -> producer.write(randRawRec()).join());
+  }
+
+  @Test
+  @Timeout(20)
+  void testWriteRawBatchWithCompression() throws Exception {
+    final String streamName = randStream(client);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 100, CompressionType.GZIP);
+    var records = doProduce(producer, 128, 100);
+    producer.close();
+
+    final String subscription = randSubscription(client, streamName);
+    List<String> res = new ArrayList<>();
+    consume(
+        client,
+        subscription,
+        "c1",
+        20,
+        receivedRawRecord -> {
+          res.add(Arrays.toString(receivedRawRecord.getRawRecord()));
+          return res.size() < records.size();
+        });
+    Assertions.assertEquals(records, res);
+  }
+
+  @Test
+  @Timeout(60)
+  void testWriteJSONBatchWithCompression() throws Exception {
+    final String streamName = randStream(client);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 10, CompressionType.GZIP);
+    Random rand = new Random();
+    var futures = new CompletableFuture[100];
+    var records = new ArrayList<HRecord>();
+    for (int i = 0; i < 100; i++) {
+      HRecord hRec =
+          HRecord.newBuilder().put("x", rand.nextInt()).put("y", rand.nextDouble()).build();
+      futures[i] = producer.write(buildRecord(hRec));
+      records.add(hRec);
+    }
+    CompletableFuture.allOf(futures).join();
+    producer.close();
+
+    final String subscription = randSubscription(client, streamName);
+    List<HRecord> res = new ArrayList<>();
+    consume(
+        client,
+        subscription,
+        "c1",
+        20,
+        null,
+        receivedHRecord -> {
+          res.add(receivedHRecord.getHRecord());
+          return res.size() < records.size();
+        });
+    var input = records.parallelStream().map(HRecord::toString).collect(Collectors.toList());
+    var output = res.parallelStream().map(HRecord::toString).collect(Collectors.toList());
+    Assertions.assertEquals(input, output);
   }
 }

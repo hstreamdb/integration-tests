@@ -3,6 +3,7 @@ package io.hstream.testing;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Service;
 import io.hstream.*;
+import io.hstream.CompressionType;
 import io.hstream.Consumer;
 import io.hstream.Producer;
 import io.hstream.Subscription;
@@ -762,6 +763,16 @@ public class TestUtils {
     BatchSetting batchSetting =
         BatchSetting.newBuilder().recordCountLimit(batchRecordLimit).build();
     return client.newBufferedProducer().stream(streamName).batchSetting(batchSetting).build();
+  }
+
+  public static BufferedProducer makeBufferedProducer(
+      HStreamClient client, String streamName, int batchRecordLimit, CompressionType tp) {
+    BatchSetting batchSetting =
+        BatchSetting.newBuilder().recordCountLimit(batchRecordLimit).ageLimit(100).build();
+    return client.newBufferedProducer().stream(streamName)
+        .batchSetting(batchSetting)
+        .compressionType(tp)
+        .build();
   }
 
   public static void restartServer(GenericContainer<?> server) throws Exception {

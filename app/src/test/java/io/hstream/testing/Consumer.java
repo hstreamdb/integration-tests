@@ -3,6 +3,8 @@ package io.hstream.testing;
 import static io.hstream.testing.TestUtils.*;
 
 import io.hstream.BufferedProducer;
+import io.hstream.CompressionType;
+import io.hstream.HRecord;
 import io.hstream.HStreamClient;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -10,12 +12,10 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
@@ -501,5 +501,63 @@ public class Consumer {
 
     Assertions.assertEquals(writeIds, readIds);
     Assertions.assertEquals(writeRecs, readRecs);
+  }
+
+  @Test
+  @Timeout(60)
+  void testResendJSONBatchWithCompression() throws Exception {
+    final String streamName = randStream(client);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 10, CompressionType.GZIP);
+    Random rand = new Random();
+    var futures = new CompletableFuture[100];
+    var records = new ArrayList<HRecord>();
+    for (int i = 0; i < 100; i++) {
+      HRecord hRec =
+          HRecord.newBuilder().put("x", rand.nextInt()).put("y", rand.nextDouble()).build();
+      futures[i] = producer.write(buildRecord(hRec));
+      records.add(hRec);
+    }
+    CompletableFuture.allOf(futures).join();
+    producer.close();
+
+    final String subscription = randSubscriptionWithTimeout(client, streamName, 5);
+    List<HRecord> res = new ArrayList<>();
+    var received = new AtomicInteger();
+    var latch = new CountDownLatch(1);
+    var consumer1 =
+        client
+            .newConsumer()
+            .subscription(subscription)
+            .hRecordReceiver(
+                (a, responder) -> {
+                  if (received.get() < 100) {
+                    if (globalRandom.nextInt(4) != 0) {
+                      res.add(a.getHRecord());
+                      responder.ack();
+                    }
+                    received.incrementAndGet();
+                  } else {
+                    latch.countDown();
+                  }
+                })
+            .build();
+    consumer1.startAsync().awaitRunning();
+    Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    consumer1.stopAsync().awaitTerminated();
+
+    consume(
+        client,
+        subscription,
+        "c1",
+        20,
+        null,
+        receivedHRecord -> {
+          res.add(receivedHRecord.getHRecord());
+          return res.size() < records.size();
+        });
+    var input =
+        records.parallelStream().map(HRecord::toString).sorted().collect(Collectors.toList());
+    var output = res.parallelStream().map(HRecord::toString).sorted().collect(Collectors.toList());
+    Assertions.assertEquals(input, output);
   }
 }
