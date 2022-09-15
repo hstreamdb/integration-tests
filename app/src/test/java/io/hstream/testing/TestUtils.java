@@ -108,6 +108,10 @@ public class TestUtils {
     return new GenericContainer<>(DockerImageName.parse("zookeeper")).withNetworkMode("host");
   }
 
+  public static GenericContainer<?> makeRQLite() {
+    return new GenericContainer<>(DockerImageName.parse("rqlite/rqlite")).withNetworkMode("host");
+  }
+
   private static DockerImageName getHStreamImageName() {
     String hstreamImageName = System.getenv("HSTREAM_IMAGE_NAME");
     if (hstreamImageName == null || hstreamImageName.equals("")) {
@@ -187,9 +191,8 @@ public class TestUtils {
                 + " --server-id "
                 + serverId
                 + " --seed-nodes 127.0.0.1:65000"
-                + " --zkuri "
-                + zkHost
-                + ":2181"
+                + " --meta-store "
+                + " zk://127.0.0.1:2181"
                 + " --store-config "
                 + "/data/hstore/logdevice.conf "
                 + " --store-admin-port "
@@ -234,9 +237,8 @@ public class TestUtils {
           + address
           + " --server-id "
           + serverId
-          + " --zkuri "
-          + zkHost
-          + ":2181"
+          + " --meta-store "
+          + " zk://127.0.0.1:2181"
           + " --store-config "
           + "/data/hstore/logdevice.conf "
           + " --store-admin-port "

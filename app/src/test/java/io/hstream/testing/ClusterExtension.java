@@ -28,6 +28,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
   private String seedNodes;
   private Path dataDir;
   private GenericContainer<?> zk;
+  private GenericContainer<?> rq;
   private GenericContainer<?> hstore;
   private String grp;
   private long beginTime;
@@ -47,6 +48,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
     zk = makeZooKeeper();
     zk.start();
+    rq = makeRQLite();
+    rq.start();
     String zkHost = "127.0.0.1";
     logger.debug("zkHost: " + zkHost);
 
@@ -166,6 +169,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     hstore.close();
     writeLog(context, "zk", grp, zk.getLogs());
     zk.close();
+    rq.close();
 
     logger.info("total time is = {}ms", System.currentTimeMillis() - beginTime);
     printEndFlag(context);

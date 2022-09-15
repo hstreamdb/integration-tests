@@ -1,11 +1,6 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.makeHServer;
-import static io.hstream.testing.TestUtils.makeHStore;
-import static io.hstream.testing.TestUtils.makeZooKeeper;
-import static io.hstream.testing.TestUtils.printBeginFlag;
-import static io.hstream.testing.TestUtils.printEndFlag;
-import static io.hstream.testing.TestUtils.writeLog;
+import static io.hstream.testing.TestUtils.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +17,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
   private static final Logger logger = LoggerFactory.getLogger(BasicExtension.class);
   private Path dataDir;
   private GenericContainer<?> zk;
+  private GenericContainer<?> rq;
   private GenericContainer<?> hstore;
   private GenericContainer<?> hserver;
   private long beginTime;
@@ -35,6 +31,8 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
     zk = makeZooKeeper();
     zk.start();
+    rq = makeRQLite();
+    rq.start();
     String zkHost = "127.0.0.1";
     logger.debug("zkHost: " + zkHost);
 
@@ -74,11 +72,14 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
     writeLog(context, "zk", grp, zk.getLogs());
     zk.close();
+    writeLog(context, "rq", grp, rq.getLogs());
+    rq.close();
 
     hserver = null;
     hstore = null;
     zk = null;
     dataDir = null;
+    rq = null;
 
     logger.info("total time is = {}ms", System.currentTimeMillis() - beginTime);
     printEndFlag(context);
