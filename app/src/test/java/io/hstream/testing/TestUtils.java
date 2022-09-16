@@ -192,7 +192,9 @@ public class TestUtils {
                 + serverId
                 + " --seed-nodes 127.0.0.1:65000"
                 + " --meta-store "
-                + " zk://127.0.0.1:2181"
+                + "zk://"
+                + zkHost
+                + ":2181"
                 + " --store-config "
                 + "/data/hstore/logdevice.conf "
                 + " --store-admin-port "
@@ -238,7 +240,9 @@ public class TestUtils {
           + " --server-id "
           + serverId
           + " --meta-store "
-          + " zk://127.0.0.1:2181"
+          + "zk://"
+          + zkHost
+          + ":2181"
           + " --store-config "
           + "/data/hstore/logdevice.conf "
           + " --store-admin-port "
