@@ -33,20 +33,23 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     zk.start();
     rq = makeRQLite();
     rq.start();
+
     String zkHost = "127.0.0.1";
     logger.debug("zkHost: " + zkHost);
-
     hstore = makeHStore(dataDir);
     hstore.start();
     String hstoreHost = "127.0.0.1";
     logger.debug("hstoreHost: " + hstoreHost);
-
     String hServerAddress = "127.0.0.1";
     int hServerPort = 6570;
-    int hServerInnerPort = 65000;
-    hserver =
-        makeHServer(
-            hServerAddress, hServerPort, hServerInnerPort, dataDir, zkHost, hstoreHost, 0, null);
+    int hServerInternalPort = 65000;
+    TestUtils.HServerCliOpts options = new TestUtils.HServerCliOpts();
+    options.serverId = 0;
+    options.address = hServerAddress;
+    options.port = hServerPort;
+    options.internalPort = hServerInternalPort;
+    options.metaHost = zkHost;
+    hserver = makeHServer(options, hServerAddress + ":" + hServerInternalPort, dataDir);
     hserver.start();
     Thread.sleep(1000);
     Object testInstance = context.getRequiredTestInstance();

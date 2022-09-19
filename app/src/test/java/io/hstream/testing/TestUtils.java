@@ -13,7 +13,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -124,6 +123,21 @@ public class TestUtils {
     }
   }
 
+  private static String getHStreamMetaStorePreference(String metaHost) {
+    String hstreamMetaStore = System.getenv("HSTREAM_META_STORE");
+    if (hstreamMetaStore == null
+        || hstreamMetaStore.equals("")
+        || hstreamMetaStore.equalsIgnoreCase("ZOOKEEPER")) {
+      logger.info("Use default Zookeeper HSTREAM_META_STORE");
+      return "zk://" + metaHost + ":2181";
+    } else if (hstreamMetaStore.equalsIgnoreCase("RQLITE")) {
+      logger.info("HSTREAM_META_STORE specified RQLITE as meta store");
+      return "rq://" + metaHost + ":4001";
+    } else {
+      throw new RuntimeException("Invalid HSTREAM_META_STORE env variable value");
+    }
+  }
+
   public static GenericContainer<?> makeHStore(Path dataDir) {
     return new GenericContainer<>(getHStreamImageName())
         .withNetworkMode("host")
@@ -164,51 +178,6 @@ public class TestUtils {
   }
 
   public static GenericContainer<?> makeHServer(
-      String address,
-      int port,
-      int internalPort,
-      Path dataDir,
-      String zkHost,
-      String hstoreHost,
-      int serverId,
-      SecurityOptions securityOptions) {
-    return new GenericContainer<>(getHStreamImageName())
-        .withNetworkMode("host")
-        .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
-        .withFileSystemBind(securityOptions.dir, "/data/security", BindMode.READ_ONLY)
-        .withCommand(
-            "bash",
-            "-c",
-            " hstream-server"
-                + " --host "
-                + "127.0.0.1 "
-                + " --port "
-                + port
-                + " --internal-port "
-                + internalPort
-                + " --address "
-                + address
-                + " --server-id "
-                + serverId
-                + " --seed-nodes 127.0.0.1:65000"
-                + " --meta-store "
-                + "zk://"
-                + zkHost
-                + ":2181"
-                + " --store-config "
-                + "/data/hstore/logdevice.conf "
-                + " --store-admin-port "
-                + "6440"
-                + " --log-level "
-                + "debug"
-                + securityOptions
-                + " --log-with-color"
-                + " --store-log-level "
-                + "error")
-        .waitingFor(Wait.forLogMessage(".*Server is started on port.*", 1));
-  }
-
-  public static GenericContainer<?> makeHServer(
       HServerCliOpts hserverConf, String seedNodes, Path dataDir) {
     return new GenericContainer<>(getHStreamImageName())
         .withNetworkMode("host")
@@ -224,7 +193,7 @@ public class TestUtils {
     public String address;
     public int port;
     public int internalPort;
-    public String zkHost;
+    public String metaHost;
 
     public SecurityOptions securityOptions;
 
@@ -240,9 +209,7 @@ public class TestUtils {
           + " --server-id "
           + serverId
           + " --meta-store "
-          + "zk://"
-          + zkHost
-          + ":2181"
+          + getHStreamMetaStorePreference(metaHost)
           + " --store-config "
           + "/data/hstore/logdevice.conf "
           + " --store-admin-port "
@@ -254,22 +221,6 @@ public class TestUtils {
           + " --store-log-level "
           + "error";
     }
-  }
-
-  public static HServerCliOpts makeHServerCliOpts(
-      AtomicInteger count, SecurityOptions securityOptions) throws IOException {
-    HServerCliOpts options = new HServerCliOpts();
-    options.serverId = count.incrementAndGet();
-    ServerSocket socket = new ServerSocket(0);
-    ServerSocket socket2 = new ServerSocket(0);
-    options.port = socket.getLocalPort();
-    socket.close();
-    options.internalPort = socket2.getLocalPort();
-    socket2.close();
-    options.address = "127.0.0.1";
-    options.zkHost = "127.0.0.1";
-    options.securityOptions = securityOptions;
-    return options;
   }
 
   public static List<GenericContainer<?>> bootstrapHServerCluster(

@@ -50,8 +50,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     zk.start();
     rq = makeRQLite();
     rq.start();
-    String zkHost = "127.0.0.1";
-    logger.debug("zkHost: " + zkHost);
+    String metaHost = "127.0.0.1";
+    logger.debug("metaHost: " + metaHost);
 
     hstore = makeHStore(dataDir);
     hstore.start();
@@ -69,7 +69,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
       options.port = hServerPort;
       options.internalPort = hServerInnerPort;
       options.address = hServerAddress;
-      options.zkHost = zkHost;
+      options.metaHost = metaHost;
       options.securityOptions = securityOptions;
       hserverConfs.add(options);
       hServerUrls.add(hServerAddress + ":" + hServerPort);
