@@ -208,7 +208,7 @@ public class TestUtils {
           + address
           + " --server-id "
           + serverId
-          + " --meta-store "
+          + " --metastore-uri "
           + getHStreamMetaStorePreference(metaHost)
           + " --store-config "
           + "/data/hstore/logdevice.conf "
