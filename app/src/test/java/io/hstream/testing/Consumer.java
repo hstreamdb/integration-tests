@@ -38,6 +38,18 @@ public class Consumer {
 
   @Test
   @Timeout(20)
+  void testCreateConsumerOnNonExistedSubscriptionShouldFail() throws Exception {
+    String subscription = "a_nonexisted_subscription_" + randText();
+    Assertions.assertThrows(
+        ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
+    // Make sure running 'consume' twice will not block infinitely.
+    // See: https://github.com/hstreamdb/hstream/pull/1086
+    Assertions.assertThrows(
+        ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
+  }
+
+  @Test
+  @Timeout(20)
   void testCreateConsumerOnDeletedSubscriptionShouldFail() throws Exception {
     String stream = randStream(client);
     String subscription = randSubscription(client, stream);

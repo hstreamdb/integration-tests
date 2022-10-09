@@ -6,8 +6,15 @@ on [Testcontainers](https://www.testcontainers.org/).
 ## How to run the cases?
 
 Run Single case:
+
 ```
-./gradlew :app:test  --tests "io.hstream.testing.Producer.testWriteRaw" --info
+./gradlew :app:test --tests "io.hstream.testing.Producer.testWriteRaw"
+```
+
+Re-run tasks:
+
+```
+./gradlew :app:test --rerun-tasks --tests "io.hstream.testing.Producer.testWriteRaw"
 ```
 
 You can use ``--info`` to show info logs.
@@ -29,11 +36,11 @@ Run the cases by Tag:
 If you have no idea about the signing stuff,
 you can run ``./gradlew publishToMavenLocal -PdisableSigning`` in Java Client Project to publish to local maven repository.
 
-After that, change the repositories part of [app/build.gradle](app/build.gradle) to use local Java Client: 
+After that, change the repositories part of [app/build.gradle](app/build.gradle) to use local Java Client:
 
 ```
 repositories {
-    // Search dependencies by order, 
+    // Search dependencies by order,
     // when Java Client is published to mavenLocal,
     // the project will use the local Java Client first.
     mavenLocal()
