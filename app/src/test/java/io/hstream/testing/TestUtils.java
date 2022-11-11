@@ -7,9 +7,9 @@ import io.hstream.CompressionType;
 import io.hstream.Consumer;
 import io.hstream.Producer;
 import io.hstream.ReceivedRecord;
+import io.hstream.Record;
 import io.hstream.Subscription;
 import io.hstream.impl.DefaultSettings;
-import io.hstream.internal.*;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -102,6 +102,11 @@ public class TestUtils {
     return subscriptionName;
   }
 
+  public static String simpleQuery(HStreamClient c, String streamName, String sql) {
+    var query = c.createQuery("CREATE STREAM " + streamName + " AS " + sql);
+    logger.info(query.getQueryText() + " has been created");
+    return query.getId();
+  }
   // -----------------------------------------------------------------------------------------------
 
   public static GenericContainer<?> makeZooKeeper() {
