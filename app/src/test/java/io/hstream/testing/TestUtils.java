@@ -49,7 +49,7 @@ public class TestUtils {
       DockerImageName.parse("hstreamdb/hstream:latest");
 
   public static String randText() {
-    return UUID.randomUUID().toString().replace("-", "");
+    return "test_" + UUID.randomUUID().toString().replace("-", "");
   }
 
   public static byte[] randBytes() {
