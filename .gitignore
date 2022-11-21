@@ -10,3 +10,5 @@ bin/
 
 .logs
 /local/
+
+MyLocalTest.java

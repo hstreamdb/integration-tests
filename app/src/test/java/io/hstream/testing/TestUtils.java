@@ -204,13 +204,13 @@ public class TestUtils {
     public SecurityOptions securityOptions;
 
     public String toString() {
-      return " --host "
+      return " --bind-address "
           + "127.0.0.1 "
           + " --port "
           + port
           + " --internal-port "
           + internalPort
-          + " --address "
+          + " --advertised-address "
           + address
           + " --server-id "
           + serverId
