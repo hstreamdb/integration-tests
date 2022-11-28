@@ -139,6 +139,9 @@ public class TestUtils {
     } else if (hstreamMetaStore.equalsIgnoreCase("RQLITE")) {
       logger.info("HSTREAM_META_STORE specified RQLITE as meta store");
       return "rq://" + metaHost + ":4001";
+    } else if (hstreamMetaStore.equalsIgnoreCase("FILE")) {
+      logger.info("HSTREAM_META_STORE specified FILE as meta store");
+      return "file:///data/metastore/hstream";
     } else {
       throw new RuntimeException("Invalid HSTREAM_META_STORE env variable value");
     }
@@ -184,10 +187,12 @@ public class TestUtils {
   }
 
   public static GenericContainer<?> makeHServer(
-      HServerCliOpts hserverConf, String seedNodes, Path dataDir) {
+      HServerCliOpts hserverConf, String seedNodes, Path dataDir, Path metadataDir) {
     return new GenericContainer<>(getHStreamImageName())
         .withNetworkMode("host")
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
+        .withFileSystemBind(
+            metadataDir.toAbsolutePath().toString(), "/data/metastore", BindMode.READ_WRITE)
         .withFileSystemBind(hserverConf.securityOptions.dir, "/data/security", BindMode.READ_ONLY)
         .withCommand(
             "bash", "-c", " hstream-server" + hserverConf.toString() + " --seed-nodes " + seedNodes)
@@ -230,11 +235,11 @@ public class TestUtils {
   }
 
   public static List<GenericContainer<?>> bootstrapHServerCluster(
-      List<HServerCliOpts> hserverConfs, String seedNodes, Path dataDir)
+      List<HServerCliOpts> hserverConfs, String seedNodes, Path dataDir, Path metadataDir)
       throws IOException, InterruptedException {
     List<GenericContainer<?>> hServers = new ArrayList<>();
     for (HServerCliOpts hserverConf : hserverConfs) {
-      var hServer = makeHServer(hserverConf, seedNodes, dataDir);
+      var hServer = makeHServer(hserverConf, seedNodes, dataDir, metadataDir);
       hServers.add(hServer);
     }
     hServers.stream().parallel().forEach(GenericContainer::start);
