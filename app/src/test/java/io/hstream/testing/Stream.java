@@ -17,15 +17,15 @@ import org.slf4j.LoggerFactory;
 public class Stream {
   private static final Logger logger = LoggerFactory.getLogger(Stream.class);
   private HStreamClient client;
-  private List<String> hServerUrls;
+  private List<String> hserverUrls;
   private final Random globalRandom = new Random();
 
   public void setClient(HStreamClient client) {
     this.client = client;
   }
 
-  public void setHServerUrls(List<String> hServerUrls) {
-    this.hServerUrls = hServerUrls;
+  public void setHServerUrls(List<String> hserverUrls) {
+    this.hserverUrls = hserverUrls;
   }
 
   @Test

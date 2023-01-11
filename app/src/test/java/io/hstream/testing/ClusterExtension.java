@@ -22,9 +22,9 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
   static final int CLUSTER_SIZE = 3;
   private static final AtomicInteger count = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(ClusterExtension.class);
-  private final List<GenericContainer<?>> hServers = new ArrayList<>(CLUSTER_SIZE);
-  private final List<String> hServerUrls = new ArrayList<>(CLUSTER_SIZE);
-  private final List<String> hServerInnerUrls = new ArrayList<>(CLUSTER_SIZE);
+  private final List<GenericContainer<?>> hservers = new ArrayList<>(CLUSTER_SIZE);
+  private final List<String> hserverUrls = new ArrayList<>(CLUSTER_SIZE);
+  private final List<String> hserverInnerUrls = new ArrayList<>(CLUSTER_SIZE);
   private String seedNodes;
   private Path dataDir;
   private GenericContainer<?> zk;
@@ -55,34 +55,37 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
     hstore = makeHStore(dataDir);
     hstore.start();
-    String hstoreHost = "127.0.0.1";
-    logger.debug("hstoreHost: " + hstoreHost);
+    String hstoreHost = hstore.getHost();
+    logger.info("hstoreHost: " + hstoreHost);
 
-    String hServerAddress = "127.0.0.1";
     List<TestUtils.HServerCliOpts> hserverConfs = new ArrayList<>(CLUSTER_SIZE);
     for (int i = 0; i < CLUSTER_SIZE; ++i) {
       int offset = count.incrementAndGet();
-      int hServerPort = 6570 + offset;
-      int hServerInnerPort = 65000 + offset;
+      int hserverPort = 6570 + offset;
+      int hserverInnerPort = 65000 + offset;
       TestUtils.HServerCliOpts options = new TestUtils.HServerCliOpts();
       options.serverId = offset;
-      options.port = hServerPort;
-      options.internalPort = hServerInnerPort;
-      options.address = hServerAddress;
+      options.port = hserverPort;
+      options.internalPort = hserverInnerPort;
+      options.address = "localhost";
       options.metaHost = metaHost;
       options.securityOptions = securityOptions;
+      options.hstoreHost = hstoreHost;
       hserverConfs.add(options);
-      hServerUrls.add(hServerAddress + ":" + hServerPort);
-      hServerInnerUrls.add(hServerAddress + ":" + hServerInnerPort);
+      hserverInnerUrls.add("hserver" + offset + ":" + hserverInnerPort);
+      hserverUrls.add("localhost:" + hserverPort);
     }
-    seedNodes = hServerInnerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
-    hServers.addAll(bootstrapHServerCluster(hserverConfs, seedNodes, dataDir));
-    hServers.stream().forEach(h -> logger.info(h.getLogs()));
-    Thread.sleep(3000);
+    seedNodes = hserverInnerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
+    hservers.addAll(bootstrapHServerCluster(hserverConfs, hserverInnerUrls, dataDir));
+    Thread.sleep(5000);
+    hservers.stream().forEach(h -> logger.info(h.getLogs()));
+    // Thread.sleep(50000);
+    // hservers.stream().forEach(h -> hserverUrls.add(h.getHost() + ":" + h.getFirstMappedPort()));
 
     Object testInstance = context.getRequiredTestInstance();
     var initUrl =
-        "hstream://" + hServerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
+        "hstream://" + hserverUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
+
     client = makeClient(initUrl, context.getTags());
 
     silence(
@@ -127,13 +130,13 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
             testInstance
                 .getClass()
                 .getMethod("setHServers", List.class)
-                .invoke(testInstance, hServers));
+                .invoke(testInstance, hservers));
     silence(
         () ->
             testInstance
                 .getClass()
                 .getMethod("setHServerUrls", List.class)
-                .invoke(testInstance, hServerUrls));
+                .invoke(testInstance, hserverUrls));
 
     silence(
         () ->
@@ -156,15 +159,15 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
     client.close();
     // waiting for servers to flush logs
-    for (int i = 0; i < hServers.size(); i++) {
-      var hServer = hServers.get(i);
-      writeLog(context, "hserver-" + i, grp, hServer.getLogs());
-      hServer.close();
+    for (int i = 0; i < hservers.size(); i++) {
+      var hserver = hservers.get(i);
+      writeLog(context, "hserver-" + i, grp, hserver.getLogs());
+      hserver.close();
     }
 
-    hServers.clear();
-    hServerUrls.clear();
-    hServerInnerUrls.clear();
+    hservers.clear();
+    hserverUrls.clear();
+    hserverInnerUrls.clear();
     count.set(0);
     writeLog(context, "hstore", grp, hstore.getLogs());
     hstore.close();

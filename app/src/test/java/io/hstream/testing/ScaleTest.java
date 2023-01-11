@@ -39,8 +39,8 @@ public class ScaleTest {
   private final Random random = new Random(System.currentTimeMillis());
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
-  private List<GenericContainer<?>> hServers;
-  private List<String> hServerUrls;
+  private List<GenericContainer<?>> hservers;
+  private List<String> hserverUrls;
   private String logMsgPathPrefix;
   private ExtensionContext context;
 
@@ -48,12 +48,12 @@ public class ScaleTest {
     this.hStreamDBUrl = hStreamDBUrl;
   }
 
-  public void setHServers(List<GenericContainer<?>> hServers) {
-    this.hServers = hServers;
+  public void setHServers(List<GenericContainer<?>> hservers) {
+    this.hservers = hservers;
   }
 
-  public void setHServerUrls(List<String> hServerUrls) {
-    this.hServerUrls = hServerUrls;
+  public void setHServerUrls(List<String> hserverUrls) {
+    this.hserverUrls = hserverUrls;
   }
 
   public void setLogMsgPathPrefix(String logMsgPathPrefix) {

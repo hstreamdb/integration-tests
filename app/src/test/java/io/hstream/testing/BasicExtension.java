@@ -40,23 +40,23 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     hstore.start();
     String hstoreHost = "127.0.0.1";
     logger.debug("hstoreHost: " + hstoreHost);
-    String hServerAddress = "127.0.0.1";
-    int hServerPort = 6570;
-    int hServerInternalPort = 65000;
+    String hserverAddress = "127.0.0.1";
+    int hserverPort = 6570;
+    int hserverInternalPort = 65000;
     TestUtils.HServerCliOpts options = new TestUtils.HServerCliOpts();
     options.serverId = 0;
-    options.address = hServerAddress;
-    options.port = hServerPort;
-    options.internalPort = hServerInternalPort;
+    options.address = hserverAddress;
+    options.port = hserverPort;
+    options.internalPort = hserverInternalPort;
     options.metaHost = zkHost;
-    hserver = makeHServer(options, hServerAddress + ":" + hServerInternalPort, dataDir);
+    hserver = makeHServer(options, hserverAddress + ":" + hserverInternalPort, dataDir);
     hserver.start();
     Thread.sleep(1000);
     Object testInstance = context.getRequiredTestInstance();
     testInstance
         .getClass()
         .getMethod("setHStreamDBUrl", String.class)
-        .invoke(testInstance, hServerAddress + ":" + hServerPort);
+        .invoke(testInstance, hserverAddress + ":" + hserverPort);
     testInstance
         .getClass()
         .getMethod("setServer", GenericContainer.class)

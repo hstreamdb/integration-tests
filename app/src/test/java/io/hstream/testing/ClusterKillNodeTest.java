@@ -43,8 +43,8 @@ public class ClusterKillNodeTest {
   private final Random random = new Random(System.currentTimeMillis());
   private String hStreamDBUrl;
   private HStreamClient hStreamClient;
-  private List<GenericContainer<?>> hServers;
-  private List<String> hServerUrls;
+  private List<GenericContainer<?>> hservers;
+  private List<String> hserverUrls;
   private String logMsgPathPrefix;
   private ExtensionContext context;
 
@@ -52,12 +52,12 @@ public class ClusterKillNodeTest {
     this.hStreamDBUrl = hStreamDBUrl;
   }
 
-  public void setHServers(List<GenericContainer<?>> hServers) {
-    this.hServers = hServers;
+  public void setHServers(List<GenericContainer<?>> hservers) {
+    this.hservers = hservers;
   }
 
-  public void setHServerUrls(List<String> hServerUrls) {
-    this.hServerUrls = hServerUrls;
+  public void setHServerUrls(List<String> hserverUrls) {
+    this.hserverUrls = hserverUrls;
   }
 
   public void setLogMsgPathPrefix(String logMsgPathPrefix) {
@@ -70,10 +70,10 @@ public class ClusterKillNodeTest {
 
   private void terminateHServerWithLogs(int turn, int serverId) throws Exception {
     logger.debug("terminate HServer" + serverId);
-    String logs = hServers.get(serverId).getLogs();
+    String logs = hservers.get(serverId).getLogs();
     Assertions.assertNotNull(logs);
     writeLog(context, "hserver-" + serverId + "-turn-" + turn, logMsgPathPrefix, logs);
-    hServers.get(serverId).close();
+    hservers.get(serverId).close();
   }
 
   @BeforeEach
@@ -91,8 +91,8 @@ public class ClusterKillNodeTest {
   @Timeout(60)
   void testListStreamAfterKillNodes() {
     String stream = randStream(hStreamClient);
-    hServers.get(0).close();
-    hServers.get(1).close();
+    hservers.get(0).close();
+    hservers.get(1).close();
     Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
   }
 
@@ -101,8 +101,8 @@ public class ClusterKillNodeTest {
   void testListSubscriptionAfterKillNodes() {
     String stream = randStream(hStreamClient);
     String subscription = randSubscription(hStreamClient, stream);
-    hServers.get(0).close();
-    hServers.get(1).close();
+    hservers.get(0).close();
+    hservers.get(1).close();
     Assertions.assertEquals(
         subscription, hStreamClient.listSubscriptions().get(0).getSubscriptionId());
   }
@@ -121,14 +121,14 @@ public class ClusterKillNodeTest {
   @Timeout(60)
   void testWrite() throws Exception {
     String streamName = TestUtils.randText();
-    logger.debug("HServer cluster size is " + hServers.size());
-    int luckyServer = random.nextInt(hServers.size());
+    logger.debug("HServer cluster size is " + hservers.size());
+    int luckyServer = random.nextInt(hservers.size());
     logger.info("lucky server is " + luckyServer);
     hStreamClient.createStream(streamName);
     var producer = hStreamClient.newProducer().stream(streamName).build();
     new Thread(
             () -> {
-              for (int i = 0; i < hServers.size(); ++i) {
+              for (int i = 0; i < hservers.size(); ++i) {
                 try {
                   Thread.sleep(1000);
                 } catch (InterruptedException e) {
@@ -146,7 +146,7 @@ public class ClusterKillNodeTest {
             })
         .start();
 
-    for (int i = 0; i < hServers.size() * 20; ++i) {
+    for (int i = 0; i < hservers.size() * 20; ++i) {
       logger.info("ready for writing record " + i);
       var recordId =
           producer.write(buildRecord(("hello" + i).getBytes(StandardCharsets.UTF_8))).join();
@@ -226,7 +226,7 @@ public class ClusterKillNodeTest {
     String stream = randStream(hStreamClient);
     Thread.sleep(5 * 1000);
 
-    hServers.get(2).start();
+    hservers.get(2).start();
 
     Thread.sleep(10 * 1000);
 
@@ -321,7 +321,7 @@ public class ClusterKillNodeTest {
     terminateHServerWithLogs(0, 1);
     terminateHServerWithLogs(0, 2);
     Thread.sleep(5 * 1000);
-    hServers.get(2).start();
+    hservers.get(2).start();
     Thread.sleep(1000);
     Assertions.assertEquals(stream, hStreamClient.listStreams().get(0).getStreamName());
 

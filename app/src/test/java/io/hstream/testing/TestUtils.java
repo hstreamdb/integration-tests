@@ -38,7 +38,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.ContainerLaunchException;
+import org.testcontainers.containers.FixedHostPortGenericContainer;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
@@ -47,6 +49,7 @@ public class TestUtils {
   private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
   private static final DockerImageName defaultHStreamImageName =
       DockerImageName.parse("hstreamdb/hstream:latest");
+  private static final Network test = Network.newNetwork();
 
   public static String randText() {
     return "test_" + UUID.randomUUID().toString().replace("-", "");
@@ -110,11 +113,15 @@ public class TestUtils {
   // -----------------------------------------------------------------------------------------------
 
   public static GenericContainer<?> makeZooKeeper() {
-    return new GenericContainer<>(DockerImageName.parse("zookeeper")).withNetworkMode("host");
+    return new GenericContainer<>(DockerImageName.parse("zookeeper"))
+        .withNetwork(test)
+        .withNetworkAliases("zookeeper");
   }
 
   public static GenericContainer<?> makeRQLite() {
-    return new GenericContainer<>(DockerImageName.parse("rqlite/rqlite")).withNetworkMode("host");
+    return new GenericContainer<>(DockerImageName.parse("rqlite/rqlite"))
+        .withNetwork(test)
+        .withNetworkAliases("rqlite");
   }
 
   private static DockerImageName getHStreamImageName() {
@@ -135,10 +142,10 @@ public class TestUtils {
         || hstreamMetaStore.equals("")
         || hstreamMetaStore.equalsIgnoreCase("ZOOKEEPER")) {
       logger.info("Use default Zookeeper HSTREAM_META_STORE");
-      return "zk://" + metaHost + ":2181";
+      return "zk://zookeeper:2181";
     } else if (hstreamMetaStore.equalsIgnoreCase("RQLITE")) {
       logger.info("HSTREAM_META_STORE specified RQLITE as meta store");
-      return "rq://" + metaHost + ":4001";
+      return "rq://rqlite:4001";
     } else {
       throw new RuntimeException("Invalid HSTREAM_META_STORE env variable value");
     }
@@ -146,7 +153,8 @@ public class TestUtils {
 
   public static GenericContainer<?> makeHStore(Path dataDir) {
     return new GenericContainer<>(getHStreamImageName())
-        .withNetworkMode("host")
+        .withNetwork(test)
+        .withNetworkAliases("hstore")
         .withFileSystemBind(
             dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_WRITE)
         .withCommand(
@@ -156,7 +164,7 @@ public class TestUtils {
                 + "--root /data/hstore "
                 + "--use-tcp "
                 + "--tcp-host "
-                + "127.0.0.1 "
+                + "$(hostname -I | awk '{print $1}') "
                 + "--user-admin-port 6440 "
                 + "--no-interactive")
         .waitingFor(Wait.forLogMessage(".*LogDevice Cluster running.*", 1));
@@ -183,10 +191,12 @@ public class TestUtils {
     }
   }
 
-  public static GenericContainer<?> makeHServer(
+  public static FixedHostPortGenericContainer<?> makeHServer(
       HServerCliOpts hserverConf, String seedNodes, Path dataDir) {
-    return new GenericContainer<>(getHStreamImageName())
-        .withNetworkMode("host")
+    return new FixedHostPortGenericContainer<>(getHStreamImageName().toString())
+        .withNetwork(test)
+        .withNetworkAliases("hserver" + hserverConf.serverId)
+        .withFixedExposedPort(hserverConf.port, hserverConf.port)
         .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data/hstore", BindMode.READ_ONLY)
         .withFileSystemBind(hserverConf.securityOptions.dir, "/data/security", BindMode.READ_ONLY)
         .withCommand(
@@ -200,24 +210,27 @@ public class TestUtils {
     public int port;
     public int internalPort;
     public String metaHost;
+    public String hstoreHost = "127.0.0.1";
 
     public SecurityOptions securityOptions;
 
     public String toString() {
       return " --bind-address "
-          + "127.0.0.1 "
+          + "0.0.0.0 "
           + " --port "
           + port
           + " --internal-port "
           + internalPort
           + " --advertised-address "
           + address
+          + " --gossip-address $(hostname -I | awk '{print $1}')"
           + " --server-id "
           + serverId
           + " --metastore-uri "
           + getHStreamMetaStorePreference(metaHost)
           + " --store-config "
           + "/data/hstore/logdevice.conf "
+          + " --store-admin-host hstore "
           + " --store-admin-port "
           + "6440"
           + " --log-level "
@@ -230,26 +243,35 @@ public class TestUtils {
   }
 
   public static List<GenericContainer<?>> bootstrapHServerCluster(
-      List<HServerCliOpts> hserverConfs, String seedNodes, Path dataDir)
+      List<HServerCliOpts> hserverConfs, List<String> hserverInnerUrls, Path dataDir)
       throws IOException, InterruptedException {
-    List<GenericContainer<?>> hServers = new ArrayList<>();
+    List<GenericContainer<?>> hservers = new ArrayList<>();
     for (HServerCliOpts hserverConf : hserverConfs) {
-      var hServer = makeHServer(hserverConf, seedNodes, dataDir);
-      hServers.add(hServer);
+      logger.info(hserverInnerUrls.toString());
+      hserverInnerUrls.remove("hserver" + hserverConf.serverId + ":" + hserverConf.internalPort);
+      var seedNodes =
+          hserverInnerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get()
+              + ",$(hostname -I | awk '{print $1}'):"
+              + hserverConf.internalPort;
+      hserverInnerUrls.add("hserver" + hserverConf.serverId + ":" + hserverConf.internalPort);
+
+      logger.info(seedNodes);
+      var hserver = makeHServer(hserverConf, seedNodes, dataDir);
+      hservers.add(hserver);
     }
-    hServers.stream().parallel().forEach(GenericContainer::start);
+    hservers.stream().parallel().forEach(GenericContainer::start);
     var res =
-        hServers
+        hservers
             .get(0)
             .execInContainer(
                 "bash",
                 "-c",
-                "hstream --host "
-                    + hserverConfs.get(0).address
+                "hstream --host 127.0.0.1 "
+                    // + hserverConfs.get(0).address
                     + " --port "
                     + hserverConfs.get(0).port
                     + " init ");
-    return hServers;
+    return hservers;
   }
 
   // -----------------------------------------------------------------------------------------------
