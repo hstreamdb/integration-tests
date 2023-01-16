@@ -116,7 +116,7 @@ public class ClusterKillNodeTest {
     Assertions.assertThrows(Exception.class, hStreamClient::listStreams);
   }
 
-  @Disabled("create log group issue")
+  // @Disabled("create log group issue")
   @RepeatedTest(5)
   @Timeout(60)
   void testWrite() throws Exception {

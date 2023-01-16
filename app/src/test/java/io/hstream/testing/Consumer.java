@@ -6,6 +6,7 @@ import io.hstream.BufferedProducer;
 import io.hstream.CompressionType;
 import io.hstream.HRecord;
 import io.hstream.HStreamClient;
+import io.hstream.Subscription;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,6 +46,58 @@ public class Consumer {
     // See: https://github.com/hstreamdb/hstream/pull/1086
     Assertions.assertThrows(
         ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
+  }
+
+  @Test
+  @Timeout(20)
+  void testResumeConsumptionLatest() throws Exception {
+    String stream = randStream(client);
+    String subscription = randSubscription(client, stream, Subscription.SubscriptionOffset.LATEST);
+    var producer = client.newProducer().stream(stream).build();
+    doProduce(producer, 100, 200);
+    var consumer = activateSubscription(client, subscription);
+    try {
+      // sleep 5s for consuming records
+      consumer.awaitTerminated(5, TimeUnit.SECONDS);
+    } catch (TimeoutException e) {
+      // stop consumer
+      consumer.stopAsync().awaitTerminated();
+    }
+    doProduce(producer, 100, 200);
+    var consumer2 = activateSubscription(client, subscription);
+    try {
+      // sleep 5s for consuming records
+      consumer2.awaitTerminated(5, TimeUnit.SECONDS);
+    } catch (TimeoutException e) {
+      // stop consumer
+      consumer2.stopAsync().awaitTerminated();
+    }
+  }
+
+  @Test
+  @Timeout(20)
+  void testResumeConsumptionEarliest() throws Exception {
+    String stream = randStream(client);
+    String subscription = randSubscription(client, stream);
+    var producer = client.newProducer().stream(stream).build();
+    doProduce(producer, 100, 200);
+    var consumer = activateSubscription(client, subscription);
+    try {
+      // sleep 5s for consuming records
+      consumer.awaitTerminated(5, TimeUnit.SECONDS);
+    } catch (TimeoutException e) {
+      // stop consumer
+      consumer.stopAsync().awaitTerminated();
+    }
+    doProduce(producer, 100, 200);
+    var consumer2 = activateSubscription(client, subscription);
+    try {
+      // sleep 5s for consuming records
+      consumer2.awaitTerminated(5, TimeUnit.SECONDS);
+    } catch (TimeoutException e) {
+      // stop consumer
+      consumer2.stopAsync().awaitTerminated();
+    }
   }
 
   @Test

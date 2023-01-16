@@ -105,6 +105,17 @@ public class TestUtils {
     return subscriptionName;
   }
 
+  public static String randSubscription(
+      HStreamClient c, String streamName, Subscription.SubscriptionOffset offset) {
+    final String subscriptionName = "test_subscription_" + randText();
+    Subscription subscription =
+        Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
+            .offset(offset)
+            .build();
+    c.createSubscription(subscription);
+    return subscriptionName;
+  }
+
   public static String simpleQuery(HStreamClient c, String streamName, String sql) {
     var query = c.createQuery("CREATE STREAM " + streamName + " AS " + sql);
     logger.info(query.getQueryText() + " has been created");
@@ -315,7 +326,7 @@ public class TestUtils {
   }
 
   // -----------------------------------------------------------------------------------------------
-  // start an async consumer and waiting until received first record
+  // start an async consumer and wait until received first record
   public static Consumer activateSubscription(HStreamClient client, String subscription)
       throws Exception {
     var latch = new CountDownLatch(1);
@@ -323,7 +334,11 @@ public class TestUtils {
         client
             .newConsumer()
             .subscription(subscription)
-            .rawRecordReceiver((x, y) -> latch.countDown())
+            .rawRecordReceiver(
+                (x, y) -> {
+                  logger.info(x.toString());
+                  latch.countDown();
+                })
             .build();
     c.startAsync().awaitRunning();
     Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
