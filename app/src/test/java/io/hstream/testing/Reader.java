@@ -43,7 +43,7 @@ public class Reader {
     String streamName = randStream(client, ShardCnt);
     var readerId = "reader";
     var shardId = client.listShards(streamName).get(0).getShardId();
-    client.newReader().readerId(readerId).streamName(streamName).build();
+    client.newReader().readerId(readerId).streamName(streamName).shardId(shardId).build();
     Assertions.assertThrows(
         Throwable.class,
         () ->
