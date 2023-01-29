@@ -24,7 +24,6 @@ public class Reader {
     this.client = client;
   }
 
-  @Disabled("server need a method to check if specific logId exist.")
   @Test
   @Timeout(10)
   void testCreateReaderWithNonExistShardShouldFail() {

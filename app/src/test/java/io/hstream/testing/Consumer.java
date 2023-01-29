@@ -17,7 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -77,7 +76,6 @@ public class Consumer {
         NullPointerException.class, () -> client.newConsumer().name("test-consumer").build());
   }
 
-  @Disabled("HS-937")
   @Test
   @Timeout(60)
   void testCreateConsumerWithExistedConsumerNameShouldFail() throws Exception {
