@@ -16,6 +16,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
 
   private static final Logger logger = LoggerFactory.getLogger(BasicExtension.class);
   private Path dataDir;
+  private Path metadataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> rq;
   private GenericContainer<?> hstore;
@@ -28,6 +29,7 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
+    metadataDir = Files.createTempDirectory("hstream-meta");
 
     zk = makeZooKeeper();
     zk.start();
@@ -49,7 +51,8 @@ public class BasicExtension implements BeforeEachCallback, AfterEachCallback {
     options.port = hServerPort;
     options.internalPort = hServerInternalPort;
     options.metaHost = zkHost;
-    hserver = makeHServer(options, hServerAddress + ":" + hServerInternalPort, dataDir);
+    hserver =
+        makeHServer(options, hServerAddress + ":" + hServerInternalPort, dataDir, metadataDir);
     hserver.start();
     Thread.sleep(1000);
     Object testInstance = context.getRequiredTestInstance();

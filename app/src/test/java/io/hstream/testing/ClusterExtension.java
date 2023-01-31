@@ -27,6 +27,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
   private final List<String> hServerInnerUrls = new ArrayList<>(CLUSTER_SIZE);
   private String seedNodes;
   private Path dataDir;
+
+  private Path metadataDir;
   private GenericContainer<?> zk;
   private GenericContainer<?> rq;
   private GenericContainer<?> hstore;
@@ -43,6 +45,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     printBeginFlag(context);
 
     dataDir = Files.createTempDirectory("hstream");
+    metadataDir = Files.createTempDirectory("hstream-meta");
 
     TestUtils.SecurityOptions securityOptions = makeSecurityOptions(context.getTags());
 
@@ -76,7 +79,7 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
       hServerInnerUrls.add(hServerAddress + ":" + hServerInnerPort);
     }
     seedNodes = hServerInnerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
-    hServers.addAll(bootstrapHServerCluster(hserverConfs, seedNodes, dataDir));
+    hServers.addAll(bootstrapHServerCluster(hserverConfs, seedNodes, dataDir, metadataDir));
     hServers.stream().forEach(h -> logger.info(h.getLogs()));
     Thread.sleep(3000);
 
@@ -116,6 +119,12 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
                 .getClass()
                 .getMethod("setDataDir", Path.class)
                 .invoke(testInstance, dataDir));
+    silence(
+        () ->
+            testInstance
+                .getClass()
+                .getMethod("setMetadataDir", Path.class)
+                .invoke(testInstance, metadataDir));
     silence(
         () ->
             testInstance
