@@ -623,4 +623,48 @@ public class Consumer {
     var output = res.parallelStream().map(HRecord::toString).sorted().collect(Collectors.toList());
     Assertions.assertEquals(input, output);
   }
+
+  @Test
+  @Timeout(60)
+  @Tag("resend")
+  void testResendTooManyMessagesToAnotherConsumer() throws Exception {
+    final String streamName = randStream(client);
+    final String subscriptionName =
+        randSubscriptionWithTimeoutAndMaxUnack(client, streamName, 5, 5);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 10);
+    final int count = 10;
+    produce(producer, 1024, count);
+    producer.close();
+
+    var received = new AtomicInteger(0);
+    var consumer_noack =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .ackBufferSize(100)
+            .ackAgeLimit(100)
+            .rawRecordReceiver((receivedRawRecord, responder) -> {})
+            .build();
+    consumer_noack.startAsync().awaitRunning();
+    Thread.sleep(6000);
+    consumer_noack.stopAsync().awaitTerminated();
+
+    var consumer_ack =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .ackBufferSize(100)
+            .ackAgeLimit(100)
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  received.incrementAndGet();
+                  responder.ack();
+                })
+            .build();
+    consumer_ack.startAsync().awaitRunning();
+    Thread.sleep(6000);
+    consumer_ack.stopAsync().awaitTerminated();
+
+    Assertions.assertEquals(count, received.get());
+  }
 }

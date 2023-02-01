@@ -83,6 +83,19 @@ public class TestUtils {
     return streamName;
   }
 
+  public static String randSubscriptionWithTimeoutAndMaxUnack(
+      HStreamClient c, String streamName, int timeout, int maxUnack) {
+    String subscriptionName = "test_subscription_" + randText();
+    Subscription subscription =
+        Subscription.newBuilder().subscription(subscriptionName).stream(streamName)
+            .offset(Subscription.SubscriptionOffset.EARLIEST)
+            .ackTimeoutSeconds(timeout)
+            .maxUnackedRecords(maxUnack)
+            .build();
+    c.createSubscription(subscription);
+    return subscriptionName;
+  }
+
   public static String randSubscriptionWithTimeout(
       HStreamClient c, String streamName, int timeout) {
     String subscriptionName = "test_subscription_" + randText();
