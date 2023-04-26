@@ -18,13 +18,10 @@ jobs:
           - io.hstream.testing.Consumer
           - io.hstream.testing.Partition
           - io.hstream.testing.Producer
-          - io.hstream.testing.Query
+          - 'io.hstream.testing.Query,io.hstream.testing.Security,io.hstream.testing.SingleNodeTest,'
           - io.hstream.testing.Reader
           - io.hstream.testing.ScaleTest
-          - io.hstream.testing.Security
-          - io.hstream.testing.SingleNodeTest
-          - io.hstream.testing.Stream
-          - io.hstream.testing.Subscription
+          - 'io.hstream.testing.Stream,io.hstream.testing.Subscription'
 
     steps:
       - uses: actions/checkout@v3
@@ -55,7 +52,8 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Run test class
-        run: ./gradlew test --tests ${{ matrix.test_class }}
+        run: |
+          echo "${{ matrix.test_class }}" | tr -d '\n' | xargs -d ',' -n1 ./gradlew test --tests
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}
