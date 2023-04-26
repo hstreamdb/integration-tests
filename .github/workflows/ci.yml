@@ -6,23 +6,13 @@ on:
     branches: [main]
 
 jobs:
-  java-test:
+  pre-check:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        distribution: ["adopt"]
-        java-version: [11]
-        test_class:
-          - io.hstream.testing.ClusterKillNodeTest
-          - io.hstream.testing.Consumer
-          - io.hstream.testing.Partition
-          - io.hstream.testing.Producer
-          - 'io.hstream.testing.Query,io.hstream.testing.Security,io.hstream.testing.SingleNodeTest,'
-          - io.hstream.testing.Reader
-          - io.hstream.testing.ScaleTest
-          - 'io.hstream.testing.Stream,io.hstream.testing.Subscription'
-
+        os: [ ubuntu-latest ]
+        distribution: [ "adopt" ]
+        java-version: [ 11 ]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -51,9 +41,38 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+  java-test:
+    needs: pre-check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        distribution: ["adopt"]
+        java-version: [11]
+        test_class:
+          - io.hstream.testing.ClusterKillNodeTest
+          - io.hstream.testing.Consumer
+          - io.hstream.testing.Partition
+          - io.hstream.testing.Producer
+          - 'io.hstream.testing.Query,io.hstream.testing.Security,io.hstream.testing.SingleNodeTest,'
+          - io.hstream.testing.Reader
+          - io.hstream.testing.ScaleTest
+          - 'io.hstream.testing.Stream,io.hstream.testing.Subscription'
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-java@v2
+        with:
+          distribution: ${{ matrix.distribution }}
+          java-version: ${{ matrix.java-version }}
+          cache: "gradle"
+
       - name: Run test class
         run: |
-          echo "${{ matrix.test_class }}" | tr -d '\n' | xargs -d ',' -n1 ./gradlew test --tests
+          echo "${{ matrix.test_class }}" | tr -d '\n' | xargs -d ',' -n1 ./gradlew test -i --tests
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}
