@@ -13,6 +13,18 @@ jobs:
         os: [ubuntu-latest]
         distribution: ["adopt"]
         java-version: [11]
+        test_class:
+          - io.hstream.testing.ClusterKillNodeTest
+          - io.hstream.testing.Consumer
+          - io.hstream.testing.Partition
+          - io.hstream.testing.Producer
+          - io.hstream.testing.Query
+          - io.hstream.testing.Reader
+          - io.hstream.testing.ScaleTest
+          - io.hstream.testing.Security
+          - io.hstream.testing.SingleNodeTest
+          - io.hstream.testing.Stream
+          - io.hstream.testing.Subscription
 
     steps:
       - uses: actions/checkout@v3
@@ -24,6 +36,7 @@ jobs:
           distribution: ${{ matrix.distribution }}
           java-version: ${{ matrix.java-version }}
           cache: "gradle"
+
       - uses: gradle/wrapper-validation-action@v1
 
       - name: check Java code format
@@ -31,7 +44,18 @@ jobs:
           ./gradlew spotlessJavaCheck
           ./gradlew spotlessGroovyGradleCheck
 
-      - run: ./gradlew build
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run test class
+        run: ./gradlew test --tests ${{ matrix.test_class }}
 
       - uses: actions/upload-artifact@v2
         if: ${{ success() }} || ${{ failure() }}
