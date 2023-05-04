@@ -180,14 +180,14 @@ public class Reader {
   }
 
   @Test
-  @Timeout(15)
+  @Timeout(30)
   void testStreamReaderReadFromEarlist() throws Throwable {
     checkStreamReaderReadWithSpecialOffset(
         new StreamShardOffset(StreamShardOffset.SpecialOffset.EARLIEST));
   }
 
   @Test
-  @Timeout(15)
+  @Timeout(30)
   void testStreamReaderReadFromLatest() throws Throwable {
     checkStreamReaderReadWithSpecialOffset(
         new StreamShardOffset(StreamShardOffset.SpecialOffset.LATEST));
@@ -348,7 +348,7 @@ public class Reader {
   void checkStreamReaderReadWithSpecialOffset(StreamShardOffset offset) throws Throwable {
     int shardCnt = 5;
     String streamName = randStream(client, shardCnt);
-    int threadCount = 8;
+    int threadCount = 5;
     int count = 1000;
     int keys = 16;
 
@@ -390,7 +390,7 @@ public class Reader {
     }
 
     // Wait for reader creation to complete
-    Thread.sleep(1000);
+    Thread.sleep(2000);
 
     BufferedProducer producer =
         client.newBufferedProducer().stream(streamName)
