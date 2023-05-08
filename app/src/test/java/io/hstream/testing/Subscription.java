@@ -129,7 +129,9 @@ public class Subscription {
     var consumer = activateSubscription(client, subscription);
 
     Assertions.assertThrows(Throwable.class, () -> client.deleteSubscription(subscription));
+    logger.info("confirm delete a running sub will throw an exception");
     client.deleteSubscription(subscription, true);
+    logger.info("confirm delete a running sub with force option will success");
     Thread.sleep(3000);
     Assertions.assertNotNull(consumer.failureCause());
     Assertions.assertEquals(0, client.listSubscriptions().size());

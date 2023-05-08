@@ -355,7 +355,8 @@ public class TestUtils {
                 })
             .build();
     c.startAsync().awaitRunning();
-    Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS));
+    logger.info("consumer activated");
     return c;
   }
 

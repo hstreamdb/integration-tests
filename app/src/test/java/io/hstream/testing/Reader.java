@@ -276,9 +276,7 @@ public class Reader {
     StreamShardOffset offset = null;
     int startIdx = 0;
     for (int i = 0; i < count; i++) {
-      if (i % 10 == 0) {
-        Thread.sleep(10);
-      }
+      Thread.sleep(5);
       rand.nextBytes(record);
       if (i == breakPoints) {
         offset = new StreamShardOffset(System.currentTimeMillis());
