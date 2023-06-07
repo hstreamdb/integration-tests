@@ -421,7 +421,7 @@ public class TestUtils {
     }
 
     @Override
-    public void failed(Service.@NotNull State from, @NotNull Throwable failure) {
+    public void failed(@NotNull Service.State from, @NotNull Throwable failure) {
       handler.accept(from, failure);
     }
   }
