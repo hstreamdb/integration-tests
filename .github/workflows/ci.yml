@@ -51,13 +51,13 @@ jobs:
         java-version: [11]
         test_class:
           - io.hstream.testing.ClusterKillNodeTest
-          - io.hstream.testing.Consumer
-          - io.hstream.testing.Partition
-          - io.hstream.testing.Producer
-          - 'io.hstream.testing.Query,io.hstream.testing.Security,io.hstream.testing.SingleNodeTest,'
-          - io.hstream.testing.Reader
+          - io.hstream.testing.ConsumerTest
+          - io.hstream.testing.PartitionTest
+          - io.hstream.testing.ProducerTest
+          - 'io.hstream.testing.QueryTest,io.hstream.testing.SecurityTest,io.hstream.testing.SingleNodeTest,'
+          - io.hstream.testing.ReaderTest
           - io.hstream.testing.ScaleTest
-          - 'io.hstream.testing.Stream,io.hstream.testing.Subscription'
+          - 'io.hstream.testing.StreamTest,io.hstream.testing.SubscriptionTest'
 
     steps:
       - uses: actions/checkout@v3

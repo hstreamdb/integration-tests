@@ -1,7 +1,8 @@
 package io.hstream.testing;
 
+import static org.assertj.core.api.Assertions.*;
+
 import io.hstream.HStreamClient;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -13,7 +14,7 @@ Tag("tls-authentication"): enable tls authentication in servers and client
  */
 @Tag("basicTest")
 @ExtendWith(ClusterExtension.class)
-public class Security {
+public class SecurityTest {
   @Test
   @Timeout(20)
   @Tag("tls")
@@ -29,8 +30,8 @@ public class Security {
   @Timeout(20)
   void testUntrustedServer() {
     String caPath = getClass().getClassLoader().getResource("security/ca.cert.pem").getPath();
-    Assertions.assertThrows(
-        Exception.class, () -> HStreamClient.builder().enableTls().tlsCaPath(caPath).build());
+    assertThatThrownBy(() -> HStreamClient.builder().enableTls().tlsCaPath(caPath).build())
+        .isInstanceOf(Exception.class);
   }
 
   @Test
@@ -39,7 +40,7 @@ public class Security {
   @Tag("tls-authentication")
   void testUntrustedClient() {
     String caPath = getClass().getClassLoader().getResource("security/ca.cert.pem").getPath();
-    Assertions.assertThrows(
-        Exception.class, () -> HStreamClient.builder().enableTls().tlsCaPath(caPath).build());
+    assertThatThrownBy(() -> HStreamClient.builder().enableTls().tlsCaPath(caPath).build())
+        .isInstanceOf(Exception.class);
   }
 }

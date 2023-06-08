@@ -18,8 +18,8 @@ import org.slf4j.LoggerFactory;
 
 @Tag("basicTest")
 @ExtendWith(ClusterExtension.class)
-public class Query {
-  private static final Logger logger = LoggerFactory.getLogger(Query.class);
+public class QueryTest {
+  private static final Logger logger = LoggerFactory.getLogger(QueryTest.class);
   private HStreamClient client;
   private List<String> hserverUrls;
   private final Random globalRandom = new Random();
