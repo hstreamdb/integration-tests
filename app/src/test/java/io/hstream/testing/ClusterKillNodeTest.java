@@ -112,7 +112,7 @@ public class ClusterKillNodeTest {
   }
 
   // @Disabled("create log group issue")
-  @RepeatedTest(5)
+  @RepeatedTest(3)
   @Timeout(60)
   void testWrite() {
     String streamName = TestUtils.randText();

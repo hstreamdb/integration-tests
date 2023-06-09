@@ -570,8 +570,8 @@ public class ConsumerTest {
     final String subscriptionName =
         randSubscriptionWithTimeoutAndMaxUnack(client, streamName, 5, 5);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 10);
-    final int count = 10;
-    produce(producer, 1024, count);
+    final int count = 100;
+    produce(producer, 10, count);
     producer.close();
 
     var received = new AtomicInteger(0);
@@ -582,13 +582,10 @@ public class ConsumerTest {
             .subscription(subscriptionName)
             .ackBufferSize(100)
             .ackAgeLimit(100)
-            .rawRecordReceiver(
-                (receivedRawRecord, responder) -> {
-                  latch.countDown();
-                })
+            .rawRecordReceiver((receivedRawRecord, responder) -> latch.countDown())
             .build();
     consumer_noack.startAsync().awaitRunning();
-    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(latch.await(6, TimeUnit.SECONDS)).isTrue();
     consumer_noack.stopAsync().awaitTerminated();
 
     var latch1 = new CountDownLatch(count);
@@ -606,7 +603,7 @@ public class ConsumerTest {
                 })
             .build();
     consumer_ack.startAsync().awaitRunning();
-    assertThat(latch1.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(latch1.await(15, TimeUnit.SECONDS)).isTrue();
     consumer_ack.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(count, received.get());

@@ -58,6 +58,23 @@ jobs:
           - io.hstream.testing.ReaderTest
           - io.hstream.testing.ScaleTest
           - 'io.hstream.testing.StreamTest,io.hstream.testing.SubscriptionTest'
+        include:
+          - test_class: io.hstream.testing.ClusterKillNodeTest
+            name: "ClusterKillNodeTest"
+          - test_class: io.hstream.testing.ConsumerTest
+            name: "ConsumerTest"
+          - test_class: io.hstream.testing.PartitionTest
+            name: "PartitionTest"
+          - test_class: io.hstream.testing.ProducerTest
+            name: "ProducerTest"
+          - test_class: 'io.hstream.testing.QueryTest,io.hstream.testing.SecurityTest,io.hstream.testing.SingleNodeTest,'
+            name: "Query-Security-SingleNodeTest"
+          - test_class: io.hstream.testing.ReaderTest
+            name: "ReaderTest"
+          - test_class: io.hstream.testing.ScaleTest
+            name: "ScaleTest"
+          - test_class: 'io.hstream.testing.StreamTest,io.hstream.testing.SubscriptionTest'
+            name: "Stream-SubscriptionTest"
 
     steps:
       - uses: actions/checkout@v3
@@ -74,10 +91,10 @@ jobs:
         run: |
           echo "${{ matrix.test_class }}" | tr -d '\n' | xargs -d ',' -n1 ./gradlew test -i --tests
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ success() }} || ${{ failure() }}
+      - uses: actions/upload-artifact@v3
+        if: ${{ failure() }}
         with:
-          name: logs-artifact
+          name: ${{ matrix.name }}-logs-artifact
           path: |
             .logs
             app/build/reports
