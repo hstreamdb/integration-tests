@@ -1,5 +1,7 @@
 package io.hstream.testing;
 
+import static org.assertj.core.api.Assertions.*;
+
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Service;
 import io.hstream.*;
@@ -19,10 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -59,6 +58,12 @@ public class TestUtils {
     return UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8);
   }
 
+  public static byte[] randBytes(int size) {
+    byte[] payload = new byte[size];
+    ThreadLocalRandom.current().nextBytes(payload);
+    return payload;
+  }
+
   public static Record randRawRec() {
     return buildRecord(randBytes());
   }
@@ -72,7 +77,7 @@ public class TestUtils {
   }
 
   public static String randStream(HStreamClient c) {
-    Random rand = new Random();
+    Random rand = new Random(System.currentTimeMillis());
     int shardCnt = Math.max(1, rand.nextInt(5));
     return randStream(c, shardCnt);
   }
@@ -321,12 +326,9 @@ public class TestUtils {
 
   public static void createStreamSucceeds(HStreamClient client, int sizeExpected, String stream) {
     List<io.hstream.Stream> streams = client.listStreams();
-    Assertions.assertEquals(sizeExpected, streams.size());
-    Assertions.assertTrue(
-        streams.stream()
-            .map(io.hstream.Stream::getStreamName)
-            .collect(Collectors.toList())
-            .contains(stream));
+    assertThat(streams.size()).isEqualTo(sizeExpected);
+    assertThat(streams.stream().map(io.hstream.Stream::getStreamName).collect(Collectors.toList()))
+        .containsExactlyInAnyOrder(stream);
   }
 
   public static void deleteStreamSucceeds(HStreamClient client, int sizeExpected, String stream) {
@@ -355,7 +357,7 @@ public class TestUtils {
                 })
             .build();
     c.startAsync().awaitRunning();
-    Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS));
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
     logger.info("consumer activated");
     return c;
   }
@@ -958,7 +960,7 @@ public class TestUtils {
   }
 
   public static void assertShardId(List<String> ids) {
-    Assertions.assertEquals(1, ids.stream().map(s -> Strings.split(s, '-')[0]).distinct().count());
+    assertThat(ids.stream().map(s -> Strings.split(s, '-')[0]).distinct().count()).isEqualTo(1);
   }
 
   public static HashMap<String, RecordsPair> batchAppendConcurrentlyWithRandomKey(
@@ -993,6 +995,7 @@ public class TestUtils {
     };
   }
 
+  @Deprecated
   public static List<ReceivedRecord> readStreamShards(
       HStreamClient client,
       int ShardCnt,

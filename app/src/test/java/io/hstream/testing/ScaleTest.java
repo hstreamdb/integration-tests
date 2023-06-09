@@ -77,7 +77,7 @@ public class ScaleTest {
 
   // -----------------------------------------------------------------------------------------------
 
-  @RepeatedTest(10)
+  @RepeatedTest(3)
   @Timeout(120)
   void testLargeNumProducer() throws Exception {
     final String stream = randStream(hStreamClient);

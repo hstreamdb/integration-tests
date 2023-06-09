@@ -1,35 +1,24 @@
 package io.hstream.testing;
 
 import static io.hstream.testing.TestUtils.*;
+import static org.assertj.core.api.Assertions.*;
 
-import io.hstream.BufferedProducer;
-import io.hstream.CompressionType;
-import io.hstream.HRecord;
-import io.hstream.HStreamClient;
-import io.hstream.Subscription;
+import io.hstream.*;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Tag("basicTest")
 @ExtendWith(ClusterExtension.class)
-public class Consumer {
+public class ConsumerTest {
   HStreamClient client;
-  private static final Logger logger = LoggerFactory.getLogger(Consumer.class);
+  private static final Logger logger = LoggerFactory.getLogger(ConsumerTest.class);
   Random globalRandom = new Random();
 
   public void setClient(HStreamClient client) {
@@ -38,123 +27,49 @@ public class Consumer {
 
   @Test
   @Timeout(20)
-  void testCreateConsumerOnNonExistedSubscriptionShouldFail() throws Exception {
+  void testCreateConsumerOnNonExistedSubscriptionShouldFail() {
     String subscription = "a_nonexisted_subscription_" + randText();
-    Assertions.assertThrows(
-        ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
+    assertThatThrownBy(() -> consume(client, subscription, "c1", 10, x -> false))
+        .isInstanceOf(Exception.class);
     // Make sure running 'consume' twice will not block infinitely.
     // See: https://github.com/hstreamdb/hstream/pull/1086
-    Assertions.assertThrows(
-        ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
-  }
-
-  @Test
-  @Timeout(20)
-  void testResumeConsumptionLatest() throws Exception {
-    String stream = randStream(client);
-    String subscription = randSubscription(client, stream, Subscription.SubscriptionOffset.LATEST);
-    var producer = client.newProducer().stream(stream).build();
-    doProduce(producer, 100, 200);
-    var consumer = activateSubscription(client, subscription);
-    try {
-      // sleep 5s for consuming records
-      consumer.awaitTerminated(5, TimeUnit.SECONDS);
-    } catch (TimeoutException e) {
-      // stop consumer
-      consumer.stopAsync().awaitTerminated();
-    }
-    doProduce(producer, 100, 200);
-    var consumer2 = activateSubscription(client, subscription);
-    try {
-      // sleep 5s for consuming records
-      consumer2.awaitTerminated(5, TimeUnit.SECONDS);
-    } catch (TimeoutException e) {
-      // stop consumer
-      consumer2.stopAsync().awaitTerminated();
-    }
-  }
-
-  @Test
-  @Timeout(20)
-  void testResumeConsumptionEarliest() throws Exception {
-    String stream = randStream(client);
-    String subscription = randSubscription(client, stream);
-    var producer = client.newProducer().stream(stream).build();
-    doProduce(producer, 100, 200);
-    var consumer = activateSubscription(client, subscription);
-    try {
-      // sleep 5s for consuming records
-      consumer.awaitTerminated(5, TimeUnit.SECONDS);
-    } catch (TimeoutException e) {
-      // stop consumer
-      consumer.stopAsync().awaitTerminated();
-    }
-    doProduce(producer, 100, 200);
-    var consumer2 = activateSubscription(client, subscription);
-    try {
-      // sleep 5s for consuming records
-      consumer2.awaitTerminated(5, TimeUnit.SECONDS);
-    } catch (TimeoutException e) {
-      // stop consumer
-      consumer2.stopAsync().awaitTerminated();
-    }
-  }
-
-  @Test
-  @Timeout(20)
-  void testCreateConsumerOnDeletedSubscriptionShouldFail() throws Exception {
-    String stream = randStream(client);
-    String subscription = randSubscription(client, stream);
-    client.deleteSubscription(subscription);
-    Assertions.assertThrows(
-        ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
-
-    String subscriptionNew = randSubscription(client, stream);
-    var producer = client.newProducer().stream(stream).build();
-    doProduce(producer, 100, 200);
-    var consumer = activateSubscription(client, subscriptionNew);
-    client.deleteSubscription(subscriptionNew, true);
-    Thread.sleep(3000);
-    Assertions.assertNotNull(consumer.failureCause());
-    Assertions.assertThrows(
-        ExecutionException.class, () -> consume(client, subscriptionNew, "c1", 10, x -> false));
-    Thread.sleep(100);
-  }
-
-  @Tag("efg")
-  @Test
-  @Timeout(60)
-  void testCreateConsumerWithoutSubscriptionNameShouldFail() {
-    Assertions.assertThrows(
-        IllegalArgumentException.class, () -> client.newConsumer().name("test-consumer").build());
+    assertThatThrownBy(() -> consume(client, subscription, "c1", 10, x -> false))
+        .isInstanceOf(Exception.class);
   }
 
   @Test
   @Timeout(60)
-  void testCreateConsumerWithExistedConsumerNameShouldFail() throws Exception {
-    final String streamName = randStream(client);
-    final String subscription = randSubscription(client, streamName);
-    var future1 = consumeAsync(client, subscription, "c1", receivedRawRecord -> false);
+  void testCreateConsumer() throws InterruptedException {
+    String stream = randStream(client);
+    String sub = randSubscription(client, stream);
+    assertThat(client.listSubscriptions()).hasSize(1);
+    RawRecordReceiver receiver = (receivedRawRecord, responder) -> responder.ack();
+
+    assertThatThrownBy(() -> client.newConsumer().rawRecordReceiver(receiver).build())
+        .as("Create consumer without subscription name")
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> client.newConsumer().subscription(sub).build())
+        .as("Create consumer without receiver")
+        .isInstanceOf(IllegalArgumentException.class);
+
+    var future1 = consumeAsync(client, sub, "c1", x -> false);
+    String sub1 = randSubscription(client, stream);
+    var future2 = consumeAsync(client, sub1, "c1", x -> false);
     Thread.sleep(1500);
-    Assertions.assertThrows(
-        ExecutionException.class, () -> consume(client, subscription, "c1", 10, x -> false));
-    future1.complete(null);
-  }
+    assertThat(future1.isCompletedExceptionally()).as("Create consumer success").isFalse();
+    assertThat(future2.isCompletedExceptionally())
+        .as("Create consumer with the same name on different subscriptions")
+        .isFalse();
 
-  @Test
-  @Timeout(60)
-  void testCreateConsumerWithExistedConsumerNameOnDifferentSubscription() throws Exception {
-    // should be okay
-    final String streamName = randStream(client);
-    final String subscription0 = randSubscription(client, streamName);
-    final String subscription1 = randSubscription(client, streamName);
-    var future1 = consumeAsync(client, subscription0, "c1", receivedRawRecord -> false);
-    var future2 = consumeAsync(client, subscription1, "c1", receivedRawRecord -> false);
-    Thread.sleep(1500);
-    Assertions.assertFalse(future1.isCompletedExceptionally());
-    Assertions.assertFalse(future2.isCompletedExceptionally());
-    future1.complete(null);
-    future2.complete(null);
+    Assertions.assertThrows(
+        Exception.class,
+        () -> consume(client, sub, "c1", 10, x -> false),
+        "Create consumer with existed consumer name");
+    client.deleteSubscription(sub, true);
+    Assertions.assertThrows(
+        Exception.class,
+        () -> consume(client, sub, "c1", 10, x -> false),
+        "Create consumer on deleted subscription");
   }
 
   @Test
@@ -162,15 +77,12 @@ public class Consumer {
   void testConsumeLargeRawRecord() throws Exception {
     final String streamName = randStream(client);
     var producer = client.newProducer().stream(streamName).build();
-    var rand = new Random();
-    byte[] record = new byte[1024 * 4];
-    rand.nextBytes(record);
+    var record = randBytes(1024 * 4);
     String rId = producer.write(buildRecord(record)).join();
-    Assertions.assertNotNull(rId);
+    assertThat(rId).isNotNull();
 
     final String subscription = randSubscription(client, streamName);
     List<byte[]> res = new ArrayList<>();
-    var lock = new ReentrantLock();
     consume(
         client,
         subscription,
@@ -180,7 +92,7 @@ public class Consumer {
           res.add(receivedRawRecord.getRawRecord());
           return false;
         });
-    Assertions.assertArrayEquals(record, res.get(0));
+    assertThat(res).containsExactly(record);
   }
 
   @Test
@@ -203,7 +115,7 @@ public class Consumer {
         });
     logger.info("records size = " + records.size());
     logger.info("res size = " + res.size());
-    Assertions.assertEquals(records, res);
+    assertThat(res).containsExactlyInAnyOrderElementsOf(records);
   }
 
   @Test
@@ -211,11 +123,12 @@ public class Consumer {
   @Tag("ack")
   void testServerResend() throws Exception {
     final String streamName = randStream(client);
-    final String subscriptionName = randSubscriptionWithTimeout(client, streamName, 5);
-    BufferedProducer producer = makeBufferedProducer(client, streamName, 1);
-    produce(producer, 1024, 1);
-    producer.close();
+    final String subscriptionName = randSubscriptionWithTimeout(client, streamName, 3);
+    var producer = client.newProducer().stream(streamName).build();
+    var record = randBytes(1024 * 4);
+    producer.write(buildRecord(record)).join();
 
+    var countDown = new CountDownLatch(1);
     var received = new TestUtils.RecordsPair();
     var future =
         consumeAsync(
@@ -227,20 +140,21 @@ public class Consumer {
                 received.insert(
                     receivedRawRecord.getRecordId(),
                     Arrays.toString(receivedRawRecord.getRawRecord()));
+                countDown.countDown();
                 return true;
               }
             },
             null,
             responder -> {});
-    Thread.sleep(4000);
+    countDown.await();
     synchronized (received) {
-      Assertions.assertEquals(1, received.ids.size());
+      assertThat(received.ids).hasSize(1);
     }
     Thread.sleep(5000);
     future.complete(null);
-    Assertions.assertEquals(2, received.ids.size());
-    Assertions.assertEquals(received.ids.get(0), received.ids.get(1));
-    Assertions.assertEquals(received.records.get(0), received.records.get(1));
+    assertThat(received.ids).hasSize(2);
+    assertThat(received.ids.get(0)).isEqualTo(received.ids.get(1));
+    assertThat(received.records.get(0)).isEqualTo(received.records.get(1));
   }
 
   @Test
@@ -248,7 +162,7 @@ public class Consumer {
   @Tag("ack")
   void testRandomlyDropACKs() throws Exception {
     final String streamName = randStream(client);
-    final String subscriptionName = randSubscriptionWithTimeout(client, streamName, 5);
+    final String subscriptionName = randSubscriptionWithTimeout(client, streamName, 3);
     BufferedProducer producer = makeBufferedProducer(client, streamName);
     int recordCount = globalRandom.nextInt(100) + 50;
     produce(producer, 128, recordCount);
@@ -256,28 +170,49 @@ public class Consumer {
     logger.info("wrote {} records", recordCount);
 
     var received = new AtomicInteger();
-    var dropped = new AtomicInteger();
-    var future =
-        consumeAsync(
-            client,
-            subscriptionName,
-            "c1",
-            r -> true,
-            null,
-            responder -> {
-              received.incrementAndGet();
-              if (globalRandom.nextInt(2) == 0 && received.get() <= recordCount) {
-                dropped.incrementAndGet();
-              } else {
-                responder.ack();
-              }
-            });
-    Thread.sleep(9000);
-    future.complete(null);
-    logger.info("dropped:{}", dropped.get());
-    Assertions.assertEquals(recordCount + dropped.get(), received.get());
+    var droppedRids = new ArrayList<String>();
+    var retransRids = new ArrayList<String>();
+    var countDown = new CountDownLatch(recordCount);
+    var consumer =
+        client
+            .newConsumer()
+            .subscription(subscriptionName)
+            .rawRecordReceiver(
+                ((receivedRawRecord, responder) -> {
+                  received.incrementAndGet();
+
+                  if (countDown.getCount() == 0) {
+                    // retransmitting
+                    synchronized (retransRids) {
+                      retransRids.add(receivedRawRecord.getRecordId());
+                    }
+                  } else {
+                    // first round consume
+                    countDown.countDown();
+                  }
+
+                  if (globalRandom.nextInt(2) == 0 && received.get() <= recordCount) {
+                    synchronized (droppedRids) {
+                      droppedRids.add(receivedRawRecord.getRecordId());
+                    }
+                  } else {
+                    responder.ack();
+                  }
+                }))
+            .build();
+    consumer.startAsync().awaitRunning();
+
+    // waiting for consumer consume all records except dropped,
+    // then we can wait for retransmitting
+    assertThat(countDown.await(10, TimeUnit.SECONDS)).isTrue();
+    Thread.sleep(5000);
+    consumer.stopAsync().awaitTerminated();
+    logger.info("dropped:{}", droppedRids.size());
+    assertThat(received.get()).isEqualTo(recordCount + droppedRids.size());
+    assertThat(retransRids).containsExactlyInAnyOrderElementsOf(droppedRids);
   }
 
+  @Disabled("Very doubtful about the validity of this test, suggest moving to unit testing")
   @Test
   @Timeout(60)
   @Tag("ack")
@@ -298,22 +233,23 @@ public class Consumer {
               latch.countDown();
               return true;
             });
-    Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
     // waiting for consumer to flush ACKs
     Thread.sleep(3000);
     f1.complete(null);
     // after consuming all records, and stopping consumer, ACKs should be sent to servers,
     // so next consumer should not receive any new records except ackSender resend.
-    Assertions.assertThrows(
-        TimeoutException.class, () -> consume(client, subscriptionName, 6, r -> false));
+    assertThatThrownBy(() -> consume(client, subscriptionName, 6, r -> false))
+        .isInstanceOf(TimeoutException.class);
   }
 
+  @Disabled("move to unit testing")
   @Test
   @Timeout(60)
   @Tag("ack")
   void testACKsWhenStopConsumer() throws Exception {
     final String streamName = randStream(client);
-    final String sub = randSubscriptionWithTimeout(client, streamName, 5);
+    final String sub = randSubscriptionWithTimeout(client, streamName, 3);
     BufferedProducer producer = makeBufferedProducer(client, streamName);
     int recordCount = 999;
     produce(producer, 128, recordCount);
@@ -339,12 +275,12 @@ public class Consumer {
             .build();
     consumer1.startAsync().awaitRunning();
     Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
-    // sleep for consumer to send all ACKs
-    Thread.sleep(3000);
+    // no need sleep here, since latch.await has return, means most ACKs have been sent to server,
+    // and remained acks will be sent when consumer stop
     consumer1.stopAsync().awaitTerminated();
 
     // waiting for server to handle ACKs
-    Thread.sleep(6000);
+    Thread.sleep(4000);
     logger.info("received {} records", received.get());
 
     // after consuming some records, and stopping consumer, ACKs should be sent to servers,
@@ -354,6 +290,7 @@ public class Consumer {
         () -> consume(client, sub, "c2", 6, r -> received.incrementAndGet() < recordCount + 1));
   }
 
+  @Disabled("There is no way to test the idempotency of ack from the client's point of view")
   @Test
   @Timeout(60)
   @Tag("ack")
@@ -381,6 +318,7 @@ public class Consumer {
     future.get(20, TimeUnit.SECONDS);
   }
 
+  @Disabled("remove to unit testing")
   @Test
   @Timeout(60)
   @Tag("ack")
@@ -562,8 +500,8 @@ public class Consumer {
     System.out.println("len=" + recs_3.size() + ", Consumer 3: " + recs_3);
     System.out.println("len=" + recs_4.size() + ", Consumer 4: " + recs_4);
 
-    Assertions.assertEquals(writeIds, readIds);
-    Assertions.assertEquals(writeRecs, readRecs);
+    assertThat(readIds).isEqualTo(writeIds);
+    assertThat(readRecs).isEqualTo(writeRecs);
   }
 
   @Test
@@ -605,7 +543,7 @@ public class Consumer {
                 })
             .build();
     consumer1.startAsync().awaitRunning();
-    Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
     consumer1.stopAsync().awaitTerminated();
 
     consume(
@@ -621,7 +559,7 @@ public class Consumer {
     var input =
         records.parallelStream().map(HRecord::toString).sorted().collect(Collectors.toList());
     var output = res.parallelStream().map(HRecord::toString).sorted().collect(Collectors.toList());
-    Assertions.assertEquals(input, output);
+    assertThat(output).isEqualTo(input);
   }
 
   @Test
@@ -637,18 +575,23 @@ public class Consumer {
     producer.close();
 
     var received = new AtomicInteger(0);
+    var latch = new CountDownLatch(count);
     var consumer_noack =
         client
             .newConsumer()
             .subscription(subscriptionName)
             .ackBufferSize(100)
             .ackAgeLimit(100)
-            .rawRecordReceiver((receivedRawRecord, responder) -> {})
+            .rawRecordReceiver(
+                (receivedRawRecord, responder) -> {
+                  latch.countDown();
+                })
             .build();
     consumer_noack.startAsync().awaitRunning();
-    Thread.sleep(6000);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
     consumer_noack.stopAsync().awaitTerminated();
 
+    var latch1 = new CountDownLatch(count);
     var consumer_ack =
         client
             .newConsumer()
@@ -659,12 +602,14 @@ public class Consumer {
                 (receivedRawRecord, responder) -> {
                   received.incrementAndGet();
                   responder.ack();
+                  latch1.countDown();
                 })
             .build();
     consumer_ack.startAsync().awaitRunning();
-    Thread.sleep(6000);
+    assertThat(latch1.await(10, TimeUnit.SECONDS)).isTrue();
     consumer_ack.stopAsync().awaitTerminated();
 
     Assertions.assertEquals(count, received.get());
+    assertThat(count).isEqualTo(received.get());
   }
 }

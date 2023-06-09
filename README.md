@@ -8,13 +8,13 @@ on [Testcontainers](https://www.testcontainers.org/).
 Run Single case:
 
 ```
-./gradlew :app:test --tests "io.hstream.testing.Producer.testWriteRaw"
+./gradlew :app:test --tests "io.hstream.testing.ProducerTest.testWriteRaw"
 ```
 
 Re-run tasks:
 
 ```
-./gradlew :app:test --rerun-tasks --tests "io.hstream.testing.Producer.testWriteRaw"
+./gradlew :app:test --rerun-tasks --tests "io.hstream.testing.ProducerTest.testWriteRaw"
 ```
 
 You can use ``--info`` to show info logs.
@@ -22,7 +22,7 @@ You can use ``--info`` to show info logs.
 Run the cases of a Class (or file):
 
 ```
-./gradlew :app:test  --tests "io.hstream.testing.Producer" --info
+./gradlew :app:test  --tests "io.hstream.testing.ProducerTest" --info
 ```
 
 Run the cases by Tag:

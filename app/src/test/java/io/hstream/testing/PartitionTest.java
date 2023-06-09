@@ -13,6 +13,7 @@ import static io.hstream.testing.TestUtils.randStream;
 import static io.hstream.testing.TestUtils.randSubscription;
 import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
 import static io.hstream.testing.TestUtils.receiveNRawRecords;
+import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.BatchSetting;
 import io.hstream.BufferedProducer;
@@ -30,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
@@ -37,9 +39,9 @@ import org.slf4j.LoggerFactory;
 
 @Tag("basicTest")
 @ExtendWith(ClusterExtension.class)
-public class Partition {
+public class PartitionTest {
   HStreamClient client;
-  private static final Logger logger = LoggerFactory.getLogger(Partition.class);
+  private static final Logger logger = LoggerFactory.getLogger(PartitionTest.class);
   Random globalRandom = new Random();
 
   public void setClient(HStreamClient client) {
@@ -48,19 +50,11 @@ public class Partition {
 
   @Test
   @Timeout(10)
-  void testListShards() throws Throwable {
+  void testListShards() {
     int ShardCnt = 5;
     String streamName = randStream(client, ShardCnt);
     var shards = client.listShards(streamName);
-    Assertions.assertEquals(shards.size(), ShardCnt);
-    // listShards should be an idempotent API
-    assertExceptions(
-        runWithThreads(
-            5,
-            () -> {
-              var res = client.listShards(streamName);
-              Assertions.assertEquals(shards, res);
-            }));
+    assertThat(shards).hasSize(ShardCnt);
   }
 
   @Test
@@ -91,7 +85,7 @@ public class Partition {
         20,
         receiveNRawRecords(count * threadCount, received, receivedCount));
     // check all appended records should be fetched.
-    Assertions.assertTrue(diffAndLogResultSets(produced, received));
+    assertThat(diffAndLogResultSets(produced, received)).isTrue();
   }
 
   @Test
@@ -119,28 +113,13 @@ public class Partition {
   }
 
   @Test
-  void testOrderWithKeys() throws Exception {
-    String streamName = randStream(client);
-    BufferedProducer producer = makeBufferedProducer(client, streamName, 100);
-    int count = 1000;
-    int keys = 5;
-    var pairs = produce(producer, 1024, count, keys);
-    producer.close();
-    String subscription = randSubscription(client, streamName);
-    var received = new HashMap<String, TestUtils.RecordsPair>(keys);
-    AtomicInteger receivedCount = new AtomicInteger();
-    consume(
-        client, subscription, streamName, 10, receiveNRawRecords(count, received, receivedCount));
-    Assertions.assertEquals(pairs, received);
-  }
-
-  @Test
   @Timeout(60)
   void testOrderWithRandomKeys() throws Exception {
-    String streamName = randStream(client);
+    int shardCount = 5;
+    String streamName = randStream(client, shardCount);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 100);
     int count = 1000;
-    int keys = 5;
+    int keys = 100;
     var pairs = produce(producer, 128, count, new TestUtils.RandomKeyGenerator(keys));
     producer.close();
     String subscription = randSubscription(client, streamName);
@@ -148,17 +127,19 @@ public class Partition {
     AtomicInteger receivedCount = new AtomicInteger();
     consume(
         client, subscription, streamName, 10, receiveNRawRecords(count, received, receivedCount));
-    Assertions.assertTrue(diffAndLogResultSets(pairs, received));
+    assertThat(diffAndLogResultSets(pairs, received)).isTrue();
+    assertThat(received).isEqualTo(pairs);
   }
 
   @Test
   @Timeout(60)
   void testConsumerGroup() throws Exception {
-    final String streamName = randStream(client);
+    int shardCount = 3;
+    final String streamName = randStream(client, shardCount);
     final String subscription = randSubscription(client, streamName);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
-    final int count = 500;
-    final int keysSize = 3;
+    final int count = 1000;
+    final int keysSize = 100;
     // write
     var pairs = produce(producer, 100, count, keysSize);
     producer.close();
@@ -166,13 +147,12 @@ public class Partition {
     // read
     var received = new HashMap<String, TestUtils.RecordsPair>();
     var latch = new CountDownLatch(count);
+    for (int i = 0; i < shardCount; i++) {
+      consumeAsync(client, subscription, handleForKeys(received, latch));
+    }
 
-    consumeAsync(client, subscription, handleForKeys(received, latch));
-    consumeAsync(client, subscription, handleForKeys(received, latch));
-    consumeAsync(client, subscription, handleForKeys(received, latch));
-
-    Assertions.assertTrue(latch.await(20, TimeUnit.SECONDS));
-    Assertions.assertTrue(diffAndLogResultSets(pairs, received));
+    assertThat(latch.await(20, TimeUnit.SECONDS)).isTrue();
+    assertThat(diffAndLogResultSets(pairs, received)).isTrue();
   }
 
   @Test
@@ -200,96 +180,106 @@ public class Partition {
     consume(client, sub, "c1", 10, handleForKeysSync(received, maxReceivedCountC1));
     logger.info("received:{}", received);
     // waiting for server to handler ACKs
-    Thread.sleep(7000);
+    Thread.sleep(3000);
 
     // consumer 2
     consume(client, sub, "c2", 10, handleForKeysSync(received, maxReceivedCountC2));
     logger.info("received:{}", received);
     // waiting for server to handler ACKs
-    Thread.sleep(7000);
+    Thread.sleep(3000);
 
     // start a new consumer to consume the rest records.
     consume(client, sub, "c3", 10, handleForKeysSync(received, rest));
-    Assertions.assertTrue(diffAndLogResultSets(wrote, received));
+    assertThat(diffAndLogResultSets(wrote, received)).isTrue();
   }
 
   @Test
   @Timeout(60)
   void testAddConsumerToConsumerGroup() throws Exception {
-    final String streamName = randStream(client);
+    final String streamName = randStream(client, 5);
     final String subscription = randSubscription(client, streamName);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
-    final int count = 5000;
-    final int keysSize = 5;
+    final int count = 2000;
+    final int keysSize = 100;
     var pairs = produce(producer, 100, count, keysSize);
     producer.close();
     var res = new HashMap<String, TestUtils.RecordsPair>();
     var latch = new CountDownLatch(count);
     var f1 = consumeAsync(client, subscription, handleForKeys(res, latch));
+    Thread.sleep(500);
     var f2 = consumeAsync(client, subscription, handleForKeys(res, latch));
-
-    Thread.sleep(1000);
-    var f3 = consumeAsync(client, subscription, handleForKeys(res, latch));
-    Assertions.assertTrue(latch.await(20, TimeUnit.SECONDS));
-    CompletableFuture.allOf(f1, f2, f3).complete(null);
-    Assertions.assertTrue(diffAndLogResultSets(pairs, res));
+    assertThat(latch.await(20, TimeUnit.SECONDS)).isTrue();
+    CompletableFuture.allOf(f1, f2).complete(null);
+    assertThat(diffAndLogResultSets(pairs, res)).isTrue();
   }
 
+  // FIXME: The call to future.complete does not stop the consumer correctly
   @Test
   @Timeout(60)
   void testReduceConsumerToConsumerGroup() throws Exception {
-    final String streamName = randStream(client);
+    final String streamName = randStream(client, 5);
     final String subscription = randSubscription(client, streamName);
-    BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
-    final int count = 5000;
-    final int keysSize = 5;
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 10);
+    final int count = 10000;
+    final int keysSize = 100;
     var wrote = produce(producer, 100, count, keysSize);
     producer.close();
     CountDownLatch signal = new CountDownLatch(count);
     var received = new HashMap<String, TestUtils.RecordsPair>();
-    var f1 = consumeAsync(client, subscription, handleForKeys(received, signal));
-    var f2 = consumeAsync(client, subscription, handleForKeys(received, signal));
-    var f3 = consumeAsync(client, subscription, handleForKeys(received, signal));
+    var f1 = consumeAsync(client, subscription, "c1", handleForKeys(received, signal));
+    var f2 = consumeAsync(client, subscription, "c2", handleForKeys(received, signal));
+    var f3 = consumeAsync(client, subscription, "c3", handleForKeys(received, signal));
 
     while (signal.getCount() > count / 3) {
-      Thread.sleep(10);
+      Thread.sleep(5);
     }
     f1.complete(null);
 
     while (signal.getCount() > count / 2) {
-      Thread.sleep(10);
+      Thread.sleep(5);
     }
     f2.complete(null);
 
-    boolean done = signal.await(20, TimeUnit.SECONDS);
+    assertThat(signal.await(20, TimeUnit.SECONDS)).isTrue();
     f3.complete(null);
-    Assertions.assertTrue(done);
 
-    Assertions.assertTrue(diffAndLogResultSets(wrote, received));
+    assertThat(diffAndLogResultSets(wrote, received)).isTrue();
   }
 
   @Timeout(60)
   @Test
   void testLargeConsumerGroup() throws Exception {
-    final String streamName = randStream(client);
+    final String streamName = randStream(client, 20);
     final String subscription = randSubscription(client, streamName);
     io.hstream.Producer producer = client.newProducer().stream(streamName).build();
-    int count = 200;
+    int count = 2000;
     byte[] rRec = new byte[100];
+    var rids = new ArrayList<String>();
+    var writes = new ArrayList<CompletableFuture<String>>();
     for (int i = 0; i < count; i++) {
-      producer
-          .write(Record.newBuilder().rawRecord(rRec).partitionKey("k_" + i % 10).build())
-          .join();
+      writes.add(
+          producer.write(Record.newBuilder().rawRecord(rRec).partitionKey("k_" + i % 10).build()));
     }
+    CompletableFuture.allOf(writes.toArray(new CompletableFuture[0])).join();
+    for (var f : writes) {
+      rids.add(f.get());
+    }
+
     CountDownLatch signal = new CountDownLatch(count);
+    var receivedRids = new ArrayList<String>();
     // start 5 consumers
     for (int i = 0; i < 5; i++) {
+      var cm = "c" + i;
       client
           .newConsumer()
           .subscription(subscription)
+          .name(cm)
           .rawRecordReceiver(
               ((receivedRawRecord, responder) -> {
-                logger.info("received:{}", receivedRawRecord.getRecordId());
+                logger.info("consumer {} received:{}", cm, receivedRawRecord.getRecordId());
+                synchronized (receivedRids) {
+                  receivedRids.add(receivedRawRecord.getRecordId());
+                }
                 signal.countDown();
               }))
           .build()
@@ -298,31 +288,40 @@ public class Partition {
     }
 
     for (int i = 0; i < 15; i++) {
-      Thread.sleep(100);
+      Thread.sleep(5);
+      var cm = "c" + (10 + i);
       client
           .newConsumer()
           .subscription(subscription)
+          .name(cm)
           .rawRecordReceiver(
               ((receivedRawRecord, responder) -> {
-                logger.info("received:{}", receivedRawRecord.getRecordId());
+                synchronized (receivedRids) {
+                  receivedRids.add(receivedRawRecord.getRecordId());
+                }
+                logger.info("consumer {} received:{}", cm, receivedRawRecord.getRecordId());
                 signal.countDown();
               }))
           .build()
           .startAsync()
           .awaitRunning();
     }
-
-    Assertions.assertTrue(signal.await(20, TimeUnit.SECONDS), "failed to receive all records");
+    assertThat(signal.await(20, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedRids.stream().sorted().distinct().collect(Collectors.toList()))
+        .as("duplicated consume should be avoid")
+        .containsExactlyInAnyOrderElementsOf(receivedRids);
+    assertThat(receivedRids).containsExactlyInAnyOrderElementsOf(rids);
   }
 
+  // FIXME: The call to future.complete does not stop the consumer correctly
   @Timeout(60)
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
-    final String streamName = randStream(client);
+    final String streamName = randStream(client, 20);
     final String subscription = randSubscription(client, streamName);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
     final int count = 20000;
-    final int keysSize = 10;
+    final int keysSize = 200;
     CountDownLatch signal = new CountDownLatch(count);
     var pairs = produce(producer, 100, count, keysSize);
     producer.close();

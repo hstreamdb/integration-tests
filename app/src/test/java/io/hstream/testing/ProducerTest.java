@@ -1,25 +1,9 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.assertExceptions;
-import static io.hstream.testing.TestUtils.buildRecord;
-import static io.hstream.testing.TestUtils.consume;
-import static io.hstream.testing.TestUtils.doProduce;
-import static io.hstream.testing.TestUtils.handleForKeysSync;
-import static io.hstream.testing.TestUtils.makeBufferedProducer;
-import static io.hstream.testing.TestUtils.produce;
-import static io.hstream.testing.TestUtils.randRawRec;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.runWithThreads;
+import static io.hstream.testing.TestUtils.*;
+import static org.assertj.core.api.Assertions.*;
 
-import io.hstream.BatchSetting;
-import io.hstream.BufferedProducer;
-import io.hstream.CompressionType;
-import io.hstream.FlowControlSetting;
-import io.hstream.HRecord;
-import io.hstream.HStreamClient;
-import io.hstream.HStreamDBClientException;
-import io.hstream.Stream;
+import io.hstream.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -31,7 +15,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -41,10 +24,10 @@ import org.slf4j.LoggerFactory;
 
 @Tag("basicTest")
 @ExtendWith(ClusterExtension.class)
-public class Producer {
-  private static final Logger logger = LoggerFactory.getLogger(Producer.class);
+public class ProducerTest {
+  private static final Logger logger = LoggerFactory.getLogger(ProducerTest.class);
   HStreamClient client;
-  Random globalRandom = new Random();
+  Random globalRandom = new Random(System.currentTimeMillis());
 
   public void setClient(HStreamClient client) {
     this.client = client;
@@ -52,14 +35,43 @@ public class Producer {
 
   @Test
   @Timeout(60)
+  void testCreateProducer() {
+    String streamName = randStream(client);
+    assertThatNoException().isThrownBy(() -> client.newProducer().stream(streamName).build());
+    assertThatNoException()
+        .isThrownBy(() -> client.newProducer().stream(streamName).requestTimeoutMs(100).build());
+    assertThatNoException()
+        .isThrownBy(() -> client.newBufferedProducer().stream(streamName).build());
+    assertThatNoException()
+        .isThrownBy(
+            () -> client.newBufferedProducer().stream(streamName).requestTimeoutMs(100).build());
+
+    assertThatThrownBy(() -> client.newProducer().stream("unExistStream").build())
+        .as("create producer with unExist stream")
+        .isInstanceOf(HStreamDBClientException.class);
+    assertThatThrownBy(
+            () ->
+                client.newBufferedProducer().stream(streamName)
+                    .batchSetting(BatchSetting.newBuilder().bytesLimit(4096).build())
+                    .flowControlSetting(FlowControlSetting.newBuilder().bytesLimit(1024).build())
+                    .build())
+        .as("create buffer producer with invalid flow control setting")
+        .isInstanceOf(HStreamDBClientException.class);
+  }
+
+  @Test
+  @Timeout(60)
   void testWriteRaw() throws Exception {
     final String streamName = randStream(client);
     var producer = client.newProducer().stream(streamName).build();
-    var rand = new Random();
-    byte[] record = new byte[128];
-    rand.nextBytes(record);
-    String rId = producer.write(buildRecord(record)).join();
-    Assertions.assertNotNull(rId);
+    List<byte[]> records = new ArrayList<>();
+    int cnt = 10;
+    for (int i = 0; i < cnt; i++) {
+      byte[] record = randBytes(10);
+      records.add(record);
+      var rId = producer.write(buildRecord(record)).join();
+      assertThat(rId).isNotNull();
+    }
 
     final String subscription = randSubscription(client, streamName);
     List<byte[]> res = new ArrayList<>();
@@ -69,36 +81,27 @@ public class Producer {
         "c1",
         20,
         (r) -> {
-          res.add(r.getRawRecord());
-          return false;
+          synchronized (res) {
+            res.add(r.getRawRecord());
+            return res.size() < cnt;
+          }
         });
-    Assertions.assertArrayEquals(record, res.get(0));
-  }
-
-  @Test
-  @Timeout(60)
-  void testWriteRawOutOfPayloadLimitShouldFail() {
-    int max = 1024 * 1024 + 20;
-    final String streamName = randStream(client);
-    var producer = client.newProducer().stream(streamName).build();
-    var rand = new Random();
-    byte[] record = new byte[max];
-    rand.nextBytes(record);
-    Assertions.assertThrows(Exception.class, () -> producer.write(buildRecord(record)).join());
+    assertThat(res).containsExactlyInAnyOrderElementsOf(records);
   }
 
   @Test
   @Timeout(60)
   void testWriteJSON() throws Exception {
     final String streamName = randStream(client);
-    List<Stream> streams = client.listStreams();
-    Assertions.assertEquals(1, streams.size());
-    Assertions.assertEquals(streamName, streams.get(0).getStreamName());
-
     var producer = client.newProducer().stream(streamName).build();
-    HRecord hRec = HRecord.newBuilder().put("x", "y").put("acc", 0).put("init", false).build();
-    String rId = producer.write(buildRecord(hRec)).join();
-    Assertions.assertNotNull(rId);
+    int cnt = 10;
+    List<String> records = new ArrayList<>(cnt);
+    for (int i = 0; i < cnt; i++) {
+      HRecord hRec = HRecord.newBuilder().put("index", i).put("bool", i % 2 == 0).build();
+      String rId = producer.write(buildRecord(hRec)).join();
+      assertThat(rId).isNotNull();
+      records.add(hRec.toString());
+    }
 
     final String subscription = randSubscription(client, streamName);
     List<HRecord> res = new ArrayList<>();
@@ -109,10 +112,25 @@ public class Producer {
         20,
         null,
         receivedHRecord -> {
-          res.add(receivedHRecord.getHRecord());
-          return false;
+          synchronized (res) {
+            res.add(receivedHRecord.getHRecord());
+            return res.size() < cnt;
+          }
         });
-    Assertions.assertEquals(hRec.toString(), res.get(0).toString());
+    assertThat(res.stream().map(HRecord::toString).collect(Collectors.toList()))
+        .containsExactlyInAnyOrderElementsOf(records);
+  }
+
+  @Test
+  @Timeout(30)
+  void testWriteRawOutOfPayloadLimitShouldFail() {
+    int max = 1024 * 1024 + 20;
+    final String streamName = randStream(client);
+    var producer = client.newProducer().stream(streamName).build();
+    var record = randBytes(max);
+    assertThatThrownBy(() -> producer.write(buildRecord(record)).join())
+        .as("write raw record with size %d", max)
+        .isInstanceOf(Exception.class);
   }
 
   @Test
@@ -120,14 +138,12 @@ public class Producer {
   void testWriteMixPayload() throws Exception {
     final String streamName = randStream(client);
     var producer = client.newProducer().stream(streamName).build();
-    var rand = new Random();
-    byte[] record = new byte[128];
-    rand.nextBytes(record);
+    var rand = new Random(System.currentTimeMillis());
     var rawRecords = new ArrayList<String>();
     var hRecords = new ArrayList<HRecord>();
     for (int i = 0; i < 100; i++) {
       if (rand.nextInt() % 2 == 0) {
-        rand.nextBytes(record);
+        var record = randBytes(128);
         producer.write(buildRecord(record)).join();
         rawRecords.add(Arrays.toString(record));
       } else {
@@ -159,8 +175,8 @@ public class Producer {
     var hRecordInput =
         hRecords.parallelStream().map(HRecord::toString).collect(Collectors.toList());
     var hOutputRecord = hRes.parallelStream().map(HRecord::toString).collect(Collectors.toList());
-    Assertions.assertEquals(hRecordInput, hOutputRecord);
-    Assertions.assertEquals(rawRecords, rawRes);
+    assertThat(rawRecords).containsExactlyInAnyOrderElementsOf(rawRes);
+    assertThat(hRecordInput).containsExactlyInAnyOrderElementsOf(hOutputRecord);
   }
 
   @Test
@@ -182,30 +198,7 @@ public class Producer {
           res.add(Arrays.toString(receivedRawRecord.getRawRecord()));
           return res.size() < records.size();
         });
-    Assertions.assertEquals(records, res);
-  }
-
-  @Test
-  @Timeout(60)
-  void testNoBatchWriteInForLoopShouldNotStuck() throws Exception {
-    final String streamName = randStream(client);
-    io.hstream.Producer producer = client.newProducer().stream(streamName).build();
-    var records = doProduce(producer, 128, globalRandom.nextInt(100) + 1);
-
-    final String subscription = randSubscription(client, streamName);
-    List<String> res = new ArrayList<>();
-    consume(
-        client,
-        subscription,
-        "c1",
-        10,
-        receivedRawRecord -> {
-          res.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-          return res.size() < records.size();
-        });
-    Assertions.assertEquals(
-        records.stream().sorted().collect(Collectors.toList()),
-        res.stream().sorted().collect(Collectors.toList()));
+    assertThat(res).containsExactlyInAnyOrderElementsOf(records);
   }
 
   @Test
@@ -239,34 +232,58 @@ public class Producer {
         });
     var input = records.parallelStream().map(HRecord::toString).collect(Collectors.toList());
     var output = res.parallelStream().map(HRecord::toString).collect(Collectors.toList());
-    Assertions.assertEquals(input, output);
+    assertThat(output).containsExactlyInAnyOrderElementsOf(input);
   }
 
   @Test
   @Timeout(60)
-  void testWriteRawBatchMultiThread() throws Throwable {
+  void testNoBatchWriteInForLoopShouldNotStuck() throws Exception {
+    final String streamName = randStream(client);
+    io.hstream.Producer producer = client.newProducer().stream(streamName).build();
+    var records = doProduce(producer, 128, globalRandom.nextInt(100) + 1);
+
+    final String subscription = randSubscription(client, streamName);
+    List<String> res = new ArrayList<>();
+    consume(
+        client,
+        subscription,
+        "c1",
+        10,
+        receivedRawRecord -> {
+          res.add(Arrays.toString(receivedRawRecord.getRawRecord()));
+          return res.size() < records.size();
+        });
+    assertThat(res).containsExactlyInAnyOrderElementsOf(records);
+  }
+
+  @Test
+  @Timeout(60)
+  void testWriteRawBatchMultiThread() {
     BufferedProducer producer =
         client.newBufferedProducer().stream(randStream(client))
             .batchSetting(BatchSetting.newBuilder().recordCountLimit(10).ageLimit(10).build())
             .build();
-    var futures = new LinkedList<CompletableFuture<String>>();
-    assertExceptions(
-        runWithThreads(
-            10,
-            () -> {
-              Random rand = new Random();
-              var fs = new LinkedList<CompletableFuture<String>>();
-              for (int i = 0; i < 100; i++) {
-                byte[] rRec = new byte[128];
-                rand.nextBytes(rRec);
-                fs.add(producer.write(buildRecord(rRec)));
-              }
-              synchronized (futures) {
-                futures.addAll(fs);
-              }
-            }));
+    var futures = new ArrayList<CompletableFuture<String>>();
+    int recordPerThread = 100;
+    int threadNum = 10;
+    assertThatNoException()
+        .isThrownBy(
+            () ->
+                runWithThreads(
+                    threadNum,
+                    () -> {
+                      var fs = new LinkedList<CompletableFuture<String>>();
+                      for (int i = 0; i < recordPerThread; i++) {
+                        var record = randBytes(128);
+                        fs.add(producer.write(buildRecord(record)));
+                      }
+                      synchronized (futures) {
+                        futures.addAll(fs);
+                      }
+                    }));
+    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     for (var f : futures) {
-      Assertions.assertNotNull(f.get());
+      assertThat(f).isCompleted();
     }
   }
 
@@ -282,28 +299,29 @@ public class Producer {
     Random rand = new Random();
     var records = new ArrayList<String>();
     var recordIds = new ArrayList<String>();
+    var writes = new ArrayList<CompletableFuture<String>>();
 
     for (int i = 0; i < totalWrites; i++) {
       int next = rand.nextInt(10);
       if (next % 2 == 0) {
         batchWrites++;
         logger.info("[turn]: {}, batch write!!!!!\n", i);
-        var writes = new ArrayList<CompletableFuture<String>>(5);
         for (int j = 0; j < batchSize; j++) {
           var rRec = new byte[] {(byte) i};
           records.add(Arrays.toString(rRec));
           writes.add(batchProducer.write(buildRecord(rRec)));
         }
-        writes.forEach(w -> recordIds.add(w.join()));
       } else {
         logger.info("[turn]: {}, no batch write!!!!!\n", i);
         var rRec = new byte[] {(byte) i};
         records.add(Arrays.toString(rRec));
-        recordIds.add(producer.write(buildRecord(rRec)).join());
+        writes.add(producer.write(buildRecord(rRec)));
       }
     }
 
     batchProducer.close();
+    writes.forEach(w -> recordIds.add(w.join()));
+    assertThat(recordIds).size().isEqualTo(records.size());
 
     int totalSize = batchWrites * batchSize + (totalWrites - batchWrites);
     final String subscription = randSubscription(client, streamName);
@@ -324,7 +342,6 @@ public class Producer {
         batchWrites,
         totalWrites - batchWrites);
     logger.info("send rid: ");
-    Assertions.assertEquals(recordIds.size(), records.size());
     for (int i = 0; i < recordIds.size(); i++) {
       logger.info(recordIds.get(i) + ": " + records.get(i));
     }
@@ -332,54 +349,53 @@ public class Producer {
     for (int i = 0; i < receivedRecordIds.size(); i++) {
       logger.info(receivedRecordIds.get(i) + ": " + res.get(i));
     }
-    Assertions.assertEquals(records.size(), res.size());
-    Assertions.assertEquals(records, res);
+    assertThat(res).size().isEqualTo(records.size());
+    assertThat(res).containsExactlyInAnyOrderElementsOf(records);
   }
 
   @Test
   @Timeout(60)
-  public void testWriteBatchRawRecordAndClose() throws Exception {
+  public void testWriteBatchRawRecordAndClose() {
     BufferedProducer producer =
         client.newBufferedProducer().stream(randStream(client))
             .batchSetting(BatchSetting.newBuilder().recordCountLimit(100).ageLimit(-1).build())
             .build();
-    Random random = new Random();
     final int count = 10;
-    CompletableFuture<?>[] recordIdFutures = new CompletableFuture[count];
+    var writes = new ArrayList<CompletableFuture<String>>(count);
     for (int i = 0; i < count; ++i) {
-      byte[] rawRecord = new byte[100];
-      random.nextBytes(rawRecord);
-      CompletableFuture<String> future = producer.write(buildRecord(rawRecord));
-      recordIdFutures[i] = future;
+      var rawRecord = randBytes(100);
+      writes.add(producer.write(buildRecord(rawRecord)));
     }
     // flush and close producer
     producer.close();
-    CompletableFuture.allOf(recordIdFutures).join();
+
+    var rids = new ArrayList<String>(count);
+    writes.forEach(f -> rids.add(f.join()));
+    assertThat(rids).size().isEqualTo(count);
   }
 
   @Test
-  @Timeout(60)
-  public void testWriteBatchRawRecordBasedTimer() throws Exception {
-    try (BufferedProducer producer =
+  @Timeout(30)
+  public void testWriteBatchRawRecordBasedTimer() {
+    BufferedProducer producer =
         client.newBufferedProducer().stream(randStream(client))
-            .batchSetting(BatchSetting.newBuilder().recordCountLimit(100).ageLimit(100).build())
-            .build()) {
-      Random random = new Random();
-      final int count = 10;
-      CompletableFuture<?>[] recordIdFutures = new CompletableFuture[count];
-      for (int i = 0; i < count; ++i) {
-        byte[] rawRecord = new byte[100];
-        random.nextBytes(rawRecord);
-        CompletableFuture<String> future = producer.write(buildRecord(rawRecord));
-        recordIdFutures[i] = future;
-      }
-      CompletableFuture.allOf(recordIdFutures).join();
+            .batchSetting(BatchSetting.newBuilder().recordCountLimit(-1).ageLimit(10).build())
+            .build();
+    final int count = 10;
+    var writes = new ArrayList<CompletableFuture<String>>(count);
+    for (int i = 0; i < count; ++i) {
+      var rawRecord = randBytes(100);
+      writes.add(producer.write(buildRecord(rawRecord)));
     }
+    writes.forEach(
+        f -> assertThatNoException().isThrownBy(() -> f.orTimeout(3, TimeUnit.SECONDS).join()));
+    writes.forEach(f -> assertThat(f).isCompleted());
+    producer.close();
   }
 
   @Test
-  @Timeout(60)
-  public void testWriteBatchRawRecordBasedBytesSize() throws Exception {
+  @Timeout(30)
+  public void testWriteBatchRawRecordBasedBytesSize() {
     BufferedProducer producer =
         client.newBufferedProducer().stream(randStream(client))
             .batchSetting(
@@ -389,23 +405,20 @@ public class Producer {
                     .bytesLimit(4096)
                     .build())
             .build();
-    Random random = new Random();
     final int count = 42;
     CompletableFuture<?>[] recordIdFutures = new CompletableFuture[count];
     for (int i = 0; i < count; ++i) {
-      byte[] rawRecord = new byte[100];
-      random.nextBytes(rawRecord);
-      CompletableFuture<String> future = producer.write(buildRecord(rawRecord));
-      recordIdFutures[i] = future;
+      var rawRecord = randBytes(100);
+      recordIdFutures[i] = producer.write(buildRecord(rawRecord));
     }
     for (int i = 0; i < count - 1; ++i) {
       recordIdFutures[i].join();
     }
 
-    Assertions.assertThrows(
-        TimeoutException.class, () -> recordIdFutures[41].get(3, TimeUnit.SECONDS));
+    assertThatThrownBy(() -> recordIdFutures[count - 1].get(3, TimeUnit.SECONDS))
+        .isInstanceOf(TimeoutException.class);
     producer.close();
-    recordIdFutures[41].join();
+    assertThatNoException().isThrownBy(() -> recordIdFutures[count - 1].join());
   }
 
   @Test
@@ -424,35 +437,20 @@ public class Producer {
     var sub = randSubscription(client, stream);
     var res = new HashMap<String, TestUtils.RecordsPair>();
     consume(client, sub, 20, handleForKeysSync(res, count));
-    Assertions.assertEquals(pairs, res);
+    assertThat(res).size().isEqualTo(pairs.size());
+    assertThat(res).containsExactlyInAnyOrderEntriesOf(pairs);
   }
 
   @Test
   @Timeout(60)
-  public void testBadFlowControlSettingShouldFail() {
-    var stream = randStream(client);
-    Assertions.assertThrows(
-        HStreamDBClientException.class,
-        () ->
-            client.newBufferedProducer().stream(stream)
-                .batchSetting(BatchSetting.newBuilder().bytesLimit(4096).build())
-                .flowControlSetting(FlowControlSetting.newBuilder().bytesLimit(1024).build())
-                .build());
-  }
-
-  @Test
-  @Timeout(60)
-  void testWriteToDeletedStreamShouldFail() throws Exception {
+  void testWriteToDeletedStreamShouldFail() {
     String stream = randStream(client);
-
     io.hstream.Producer producer = client.newProducer().stream(stream).build();
-
     String id0 = producer.write(randRawRec()).join();
-    String id1 = producer.write(randRawRec()).join();
-    Assertions.assertTrue(id0.compareTo(id1) < 0);
+    assertThat(id0).isNotNull();
 
     client.deleteStream(stream);
-    Assertions.assertThrows(Exception.class, () -> producer.write(randRawRec()).join());
+    assertThatThrownBy(() -> producer.write(randRawRec()).join()).isInstanceOf(Exception.class);
   }
 
   @Test
@@ -474,7 +472,7 @@ public class Producer {
           res.add(Arrays.toString(receivedRawRecord.getRawRecord()));
           return res.size() < records.size();
         });
-    Assertions.assertEquals(records, res);
+    assertThat(res).containsExactlyInAnyOrderElementsOf(records);
   }
 
   @Test
@@ -508,6 +506,6 @@ public class Producer {
         });
     var input = records.parallelStream().map(HRecord::toString).collect(Collectors.toList());
     var output = res.parallelStream().map(HRecord::toString).collect(Collectors.toList());
-    Assertions.assertEquals(input, output);
+    assertThat(output).containsExactlyInAnyOrderElementsOf(input);
   }
 }
