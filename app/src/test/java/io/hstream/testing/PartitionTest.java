@@ -234,6 +234,10 @@ public class PartitionTest {
     f2.stop();
 
     assertThat(signal.await(20, TimeUnit.SECONDS)).isTrue();
+    // sleep more time to make sure all resend records been received. The problem is
+    // RecordsPair.insert() method can't identify duplicated records
+    // FIXME: this is a workaround, find a better way to avoid sleep
+    Thread.sleep(8000);
     f3.stop();
 
     assertThat(diffAndLogResultSetsWithoutDuplicated(wrote, received)).isTrue();
