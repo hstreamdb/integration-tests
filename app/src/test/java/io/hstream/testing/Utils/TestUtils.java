@@ -370,8 +370,8 @@ public class TestUtils {
     public List<String> records;
 
     public RecordsPair() {
-      ids = new LinkedList<>();
-      records = new LinkedList<>();
+      ids = new ArrayList<>();
+      records = new ArrayList<>();
     }
 
     @Override
