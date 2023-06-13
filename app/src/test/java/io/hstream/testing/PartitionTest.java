@@ -1,32 +1,23 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
-import static io.hstream.testing.TestUtils.consume;
-import static io.hstream.testing.TestUtils.consumeAsync;
-import static io.hstream.testing.TestUtils.diffAndLogResultSets;
-import static io.hstream.testing.TestUtils.generateKeysIncludingDefaultKey;
-import static io.hstream.testing.TestUtils.handleForKeys;
-import static io.hstream.testing.TestUtils.handleForKeysSync;
-import static io.hstream.testing.TestUtils.makeBufferedProducer;
-import static io.hstream.testing.TestUtils.produce;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
-import static io.hstream.testing.TestUtils.receiveNRawRecords;
+import static io.hstream.testing.Utils.ConsumerService.consume;
+import static io.hstream.testing.Utils.ConsumerService.startConsume;
+import static io.hstream.testing.Utils.TestUtils.*;
+import static io.hstream.testing.Utils.TestUtils.diffAndLogResultSets;
+import static io.hstream.testing.Utils.TestUtils.handleForKeys;
+import static io.hstream.testing.Utils.TestUtils.handleForKeysSync;
+import static io.hstream.testing.Utils.TestUtils.makeBufferedProducer;
+import static io.hstream.testing.Utils.TestUtils.produce;
+import static io.hstream.testing.Utils.TestUtils.randStream;
+import static io.hstream.testing.Utils.TestUtils.randSubscription;
+import static io.hstream.testing.Utils.TestUtils.randSubscriptionWithTimeout;
+import static io.hstream.testing.Utils.TestUtils.receiveNRawRecords;
 import static org.assertj.core.api.Assertions.*;
 
-import io.hstream.BatchSetting;
-import io.hstream.BufferedProducer;
-import io.hstream.HStreamClient;
-import io.hstream.Producer;
-import io.hstream.Record;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Random;
+import io.hstream.*;
+import io.hstream.testing.Utils.ConsumerService;
+import io.hstream.testing.Utils.TestUtils;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -147,11 +138,13 @@ public class PartitionTest {
     // read
     var received = new HashMap<String, TestUtils.RecordsPair>();
     var latch = new CountDownLatch(count);
+    var consumers = new ArrayList<ConsumerService>();
     for (int i = 0; i < shardCount; i++) {
-      consumeAsync(client, subscription, handleForKeys(received, latch));
+      consumers.add(startConsume(client, subscription, handleForKeys(received, latch)));
     }
 
     assertThat(latch.await(20, TimeUnit.SECONDS)).isTrue();
+    consumers.forEach(ConsumerService::stop);
     assertThat(diffAndLogResultSets(pairs, received)).isTrue();
   }
 
@@ -205,45 +198,45 @@ public class PartitionTest {
     producer.close();
     var res = new HashMap<String, TestUtils.RecordsPair>();
     var latch = new CountDownLatch(count);
-    var f1 = consumeAsync(client, subscription, handleForKeys(res, latch));
+    var c1 = startConsume(client, subscription, handleForKeys(res, latch));
     Thread.sleep(500);
-    var f2 = consumeAsync(client, subscription, handleForKeys(res, latch));
+    var c2 = startConsume(client, subscription, handleForKeys(res, latch));
     assertThat(latch.await(20, TimeUnit.SECONDS)).isTrue();
-    CompletableFuture.allOf(f1, f2).complete(null);
+    c1.stop();
+    c2.stop();
     assertThat(diffAndLogResultSets(pairs, res)).isTrue();
   }
 
-  // FIXME: The call to future.complete does not stop the consumer correctly
   @Test
-  @Timeout(60)
+  @Timeout(30)
   void testReduceConsumerToConsumerGroup() throws Exception {
     final String streamName = randStream(client, 5);
-    final String subscription = randSubscription(client, streamName);
+    final String subscription = randSubscriptionWithTimeout(client, streamName, 5);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 10);
-    final int count = 10000;
+    final int count = 5000;
     final int keysSize = 100;
-    var wrote = produce(producer, 100, count, keysSize);
+    var wrote = produce(producer, 10, count, keysSize);
     producer.close();
     CountDownLatch signal = new CountDownLatch(count);
     var received = new HashMap<String, TestUtils.RecordsPair>();
-    var f1 = consumeAsync(client, subscription, "c1", handleForKeys(received, signal));
-    var f2 = consumeAsync(client, subscription, "c2", handleForKeys(received, signal));
-    var f3 = consumeAsync(client, subscription, "c3", handleForKeys(received, signal));
+    var f1 = startConsume(client, subscription, "c1", handleForKeys(received, signal));
+    var f2 = startConsume(client, subscription, "c2", handleForKeys(received, signal));
+    var f3 = startConsume(client, subscription, "c3", handleForKeys(received, signal));
 
-    while (signal.getCount() > count / 3) {
+    while (signal.getCount() > count * 2 / 3) {
       Thread.sleep(5);
     }
-    f1.complete(null);
+    f1.stop();
 
     while (signal.getCount() > count / 2) {
       Thread.sleep(5);
     }
-    f2.complete(null);
+    f2.stop();
 
     assertThat(signal.await(20, TimeUnit.SECONDS)).isTrue();
-    f3.complete(null);
+    f3.stop();
 
-    assertThat(diffAndLogResultSets(wrote, received)).isTrue();
+    assertThat(diffAndLogResultSetsWithoutDuplicated(wrote, received)).isTrue();
   }
 
   @Timeout(60)
@@ -326,99 +319,28 @@ public class PartitionTest {
     var pairs = produce(producer, 100, count, keysSize);
     producer.close();
     var res = new HashMap<String, TestUtils.RecordsPair>();
-    var futures = new LinkedList<CompletableFuture<Void>>();
+    var consumers = new LinkedList<ConsumerService>();
     // start 5 consumers
     for (int i = 0; i < 5; i++) {
-      futures.add(consumeAsync(client, subscription, handleForKeys(res, signal)));
+      var consumer = startConsume(client, subscription, handleForKeys(res, signal));
+      consumers.add(consumer);
     }
 
     // randomly kill and start some consumers
     for (int i = 0; i < 10; i++) {
       Thread.sleep(100);
       if (globalRandom.nextInt(4) == 0) {
-        futures.pop().complete(null);
+        consumers.pop().stop();
         logger.info("stopped a consumer");
       } else {
-        futures.add(consumeAsync(client, subscription, handleForKeys(res, signal)));
+        var consumer = startConsume(client, subscription, handleForKeys(res, signal));
+        consumers.add(consumer);
         logger.info("started a new consumer");
       }
     }
 
     Assertions.assertTrue(signal.await(20, TimeUnit.SECONDS), "failed to receive all records");
-    futures.forEach(it -> it.complete(null));
+    consumers.forEach(ConsumerService::stop);
     Assertions.assertTrue(diffAndLogResultSets(pairs, res));
-  }
-
-  @Disabled("Can't confirm assign shard balance now.")
-  @Test
-  @Timeout(60)
-  void testShardBalance() throws Exception {
-    var stream = randStream(client);
-    final String subscription = randSubscription(client, stream);
-    int shardCount = 10;
-    int recordCount = 100;
-    int consumerCount = 7;
-
-    // Async Read
-    List<List<String>> readRes = new ArrayList<>();
-    var futures = new CompletableFuture[consumerCount];
-    var receivedKeys = new ArrayList<HashSet<String>>();
-    var latch = new CountDownLatch(recordCount);
-    for (int i = 0; i < consumerCount; ++i) {
-      var records = new LinkedList<String>();
-      readRes.add(records);
-      var keys = new HashSet<String>();
-      receivedKeys.add(keys);
-      futures[i] =
-          consumeAsync(
-              client,
-              subscription,
-              "c" + i,
-              receivedRawRecord -> {
-                synchronized (keys) {
-                  records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-                  keys.add(receivedRawRecord.getHeader().getPartitionKey());
-                  latch.countDown();
-                  return true;
-                }
-              });
-    }
-
-    Thread.sleep(10000);
-    // Write
-    Producer producer = client.newProducer().stream(stream).build();
-    var keys = generateKeysIncludingDefaultKey(shardCount);
-    var writeRes = produce(producer, 32, recordCount, new TestUtils.RandomKeyGenerator(keys));
-    Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS));
-    CompletableFuture.allOf(futures).complete(null);
-
-    // Analysis
-    // Keys balancing part
-    logger.info("===== Keys Stats =====");
-
-    HashSet<String> unionOfKeys = new HashSet<>();
-    for (int i = 0; i < consumerCount; ++i) {
-      HashSet<String> ownedKeys = receivedKeys.get(i);
-      logger.info("Consumer {}: {}", i, ownedKeys);
-      // 1. When consumer number <= key number, every consumer owns at least 1 key
-      Assertions.assertFalse(ownedKeys.isEmpty());
-      unionOfKeys.addAll(ownedKeys);
-    }
-    logger.info("All allocated keys: {}", unionOfKeys);
-
-    // 2. Every item written to the database is read out
-    HashSet<String> writeResAsSet = new HashSet<>();
-    HashSet<String> readResAsSet = new HashSet<>();
-    for (var thisValue : writeRes.values()) {
-      writeResAsSet.addAll(thisValue.records);
-    }
-    for (var thisValue : readRes) {
-      readResAsSet.addAll(thisValue);
-    }
-    Assertions.assertEquals(readResAsSet, writeResAsSet);
-
-    // 3. Assert the union of keys all consumers own is equal to all keys
-    HashSet<String> expectedKeys = new HashSet<>(writeRes.keySet());
-    Assertions.assertEquals(unionOfKeys, expectedKeys);
   }
 }

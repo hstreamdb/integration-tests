@@ -1,12 +1,10 @@
-package io.hstream.testing;
+package io.hstream.testing.Utils;
 
 import static org.assertj.core.api.Assertions.*;
 
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.Service;
 import io.hstream.*;
 import io.hstream.CompressionType;
-import io.hstream.Consumer;
 import io.hstream.Producer;
 import io.hstream.ReceivedRecord;
 import io.hstream.Record;
@@ -24,13 +22,10 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.bouncycastle.util.Strings;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.slf4j.Logger;
@@ -200,7 +195,7 @@ public class TestUtils {
         .waitingFor(Wait.forLogMessage(".*LogDevice Cluster running.*", 1));
   }
 
-  static class SecurityOptions {
+  public static class SecurityOptions {
     public String dir;
     public boolean enableTls;
     public String keyPath;
@@ -234,7 +229,7 @@ public class TestUtils {
         .waitingFor(Wait.forLogMessage(".*Server is started on port.*", 1));
   }
 
-  static class HServerCliOpts {
+  public static class HServerCliOpts {
     public int serverId;
     public String address;
     public int port;
@@ -341,144 +336,6 @@ public class TestUtils {
             .contains(stream));
   }
 
-  // -----------------------------------------------------------------------------------------------
-  // start an async consumer and wait until received first record
-  public static Consumer activateSubscription(HStreamClient client, String subscription)
-      throws Exception {
-    var latch = new CountDownLatch(1);
-    var c =
-        client
-            .newConsumer()
-            .subscription(subscription)
-            .rawRecordReceiver(
-                (x, y) -> {
-                  logger.info(x.toString());
-                  latch.countDown();
-                })
-            .build();
-    c.startAsync().awaitRunning();
-    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
-    logger.info("consumer activated");
-    return c;
-  }
-
-  public static void consume(
-      HStreamClient client,
-      String subscription,
-      long timeoutSeconds,
-      Function<ReceivedRawRecord, Boolean> handle)
-      throws Exception {
-    consumeAsync(client, subscription, randText(), handle).get(timeoutSeconds, TimeUnit.SECONDS);
-  }
-
-  public static void consume(
-      HStreamClient client,
-      String subscription,
-      String name,
-      long timeoutSeconds,
-      Function<ReceivedRawRecord, Boolean> handle)
-      throws Exception {
-    consumeAsync(client, subscription, name, handle).get(timeoutSeconds, TimeUnit.SECONDS);
-  }
-
-  public static void consume(
-      HStreamClient client,
-      String subscription,
-      String name,
-      long timeoutSeconds,
-      Function<ReceivedRawRecord, Boolean> handle,
-      Function<ReceivedHRecord, Boolean> handleHRecord)
-      throws Exception {
-    consumeAsync(client, subscription, name, handle, handleHRecord)
-        .get(timeoutSeconds, TimeUnit.SECONDS);
-  }
-
-  public static CompletableFuture<Void> consumeAsync(
-      HStreamClient client, String subscription, Function<ReceivedRawRecord, Boolean> handle) {
-    return consumeAsync(client, subscription, randText(), handle, null, null);
-  }
-
-  public static CompletableFuture<Void> consumeAsync(
-      HStreamClient client,
-      String subscription,
-      String name,
-      Function<ReceivedRawRecord, Boolean> handle) {
-    return consumeAsync(client, subscription, name, handle, null, null);
-  }
-
-  public static CompletableFuture<Void> consumeAsync(
-      HStreamClient client,
-      String subscription,
-      String name,
-      Function<ReceivedRawRecord, Boolean> handle,
-      Function<ReceivedHRecord, Boolean> handleHRecord) {
-    return consumeAsync(client, subscription, name, handle, handleHRecord, null);
-  }
-
-  static class FailedConsumerListener extends Service.Listener {
-    BiConsumer<Service.State, Throwable> handler;
-
-    FailedConsumerListener(BiConsumer<Service.State, Throwable> handler) {
-      this.handler = handler;
-    }
-
-    @Override
-    public void failed(@NotNull Service.State from, @NotNull Throwable failure) {
-      handler.accept(from, failure);
-    }
-  }
-
-  public static CompletableFuture<Void> consumeAsync(
-      HStreamClient client,
-      String subscription,
-      String name,
-      Function<ReceivedRawRecord, Boolean> handle,
-      Function<ReceivedHRecord, Boolean> handleHRecord,
-      java.util.function.Consumer<Responder> handleResponder) {
-    CompletableFuture<Void> future = new CompletableFuture<>();
-    var stopped = new AtomicBoolean(false);
-    BiConsumer<Object, Responder> process =
-        (receivedRecord, responder) -> {
-          if (stopped.get()) {
-            return;
-          }
-          if (handleResponder != null) {
-            handleResponder.accept(responder);
-          } else {
-            responder.ack();
-          }
-          try {
-            boolean consumeNext =
-                receivedRecord instanceof ReceivedRawRecord
-                    ? handle.apply((ReceivedRawRecord) receivedRecord)
-                    : handleHRecord.apply((ReceivedHRecord) receivedRecord);
-            if (!consumeNext) {
-              stopped.set(true);
-              future.complete(null);
-            }
-          } catch (Exception e) {
-            future.completeExceptionally(e);
-          }
-        };
-    var consumer =
-        client
-            .newConsumer()
-            .subscription(subscription)
-            .name(name)
-            .rawRecordReceiver(process::accept)
-            .hRecordReceiver(process::accept)
-            .build();
-    consumer.addListener(
-        new FailedConsumerListener(
-            (fs, e) -> {
-              logger.info("consumer failed, e:{}", e.getMessage());
-              future.completeExceptionally(e);
-            }),
-        new ScheduledThreadPoolExecutor(1));
-    consumer.startAsync().awaitRunning();
-    return future.whenCompleteAsync((x, y) -> consumer.stopAsync().awaitTerminated());
-  }
-
   public static Function<ReceivedRawRecord, Boolean> handleForKeysSync(
       HashMap<String, RecordsPair> pairs, int count) {
     var received = new AtomicInteger(0);
@@ -499,28 +356,6 @@ public class TestUtils {
     };
   }
 
-  public static Consumer createConsumerCollectStringPayload(
-      HStreamClient client,
-      String subscription,
-      String name,
-      List<String> records,
-      CountDownLatch latch,
-      ReentrantLock lock) {
-    return client
-        .newConsumer()
-        .subscription(subscription)
-        .name(name)
-        .rawRecordReceiver(
-            (receivedRawRecord, responder) -> {
-              lock.lock();
-              records.add(Arrays.toString(receivedRawRecord.getRawRecord()));
-              lock.unlock();
-              responder.ack();
-              latch.countDown();
-            })
-        .build();
-  }
-
   public static List<String> doProduce(Producer producer, int payloadSize, int recordsNums) {
     return produce(producer, payloadSize, recordsNums).records;
   }
@@ -534,7 +369,7 @@ public class TestUtils {
     public List<String> ids;
     public List<String> records;
 
-    RecordsPair() {
+    public RecordsPair() {
       ids = new LinkedList<>();
       records = new LinkedList<>();
     }
@@ -618,7 +453,7 @@ public class TestUtils {
       this.keys = keys;
     }
 
-    RandomKeyGenerator(int keysSize) {
+    public RandomKeyGenerator(int keysSize) {
       this.keys =
           (ArrayList<String>)
               IntStream.range(0, keysSize)
@@ -723,7 +558,7 @@ public class TestUtils {
     int end;
     Random rand = new Random();
 
-    RandomSizeRecordGenerator(int begIncluded, int endExcluded) {
+    public RandomSizeRecordGenerator(int begIncluded, int endExcluded) {
       assert begIncluded > 0 && endExcluded > begIncluded;
       this.beg = begIncluded;
       this.end = endExcluded;
@@ -828,6 +663,29 @@ public class TestUtils {
 
   public static void printEndFlag(ExtensionContext context) {
     printFlag("end", context);
+  }
+
+  public static boolean diffAndLogResultSetsWithoutDuplicated(
+      HashMap<String, TestUtils.RecordsPair> l, HashMap<String, TestUtils.RecordsPair> r) {
+    if (!l.keySet().equals(r.keySet())) {
+      logger.info("keySet is not same, l:{}, r:{}", l.keySet(), r.keySet());
+      return false;
+    }
+    for (var k : l.keySet()) {
+      var lids = new HashSet<>(l.get(k).ids);
+      var rids = new HashSet<>(r.get(k).ids);
+      if (!lids.equals(rids)) {
+        logger.info("key:{}, ids is not same \n l:{} \n r:{}", k, lids, rids);
+        return false;
+      }
+      var lrecords = new HashSet<>(l.get(k).records);
+      var rrecords = new HashSet<>(r.get(k).records);
+      if (!lrecords.equals(rrecords)) {
+        logger.info("key:{}, records is not same \n l:{} \n r:{}", k, lrecords, rrecords);
+        return false;
+      }
+    }
+    return true;
   }
 
   public static boolean diffAndLogResultSets(

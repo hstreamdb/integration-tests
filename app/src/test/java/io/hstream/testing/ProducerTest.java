@@ -1,9 +1,11 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
+import static io.hstream.testing.Utils.ConsumerService.consume;
+import static io.hstream.testing.Utils.TestUtils.*;
 import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.*;
+import io.hstream.testing.Utils.TestUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;

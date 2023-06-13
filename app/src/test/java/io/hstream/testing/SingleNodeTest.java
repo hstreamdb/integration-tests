@@ -1,11 +1,11 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.createConsumerCollectStringPayload;
-import static io.hstream.testing.TestUtils.doProduce;
-import static io.hstream.testing.TestUtils.makeBufferedProducer;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.restartServer;
+import static io.hstream.testing.Utils.ConsumerService.createConsumerCollectStringPayload;
+import static io.hstream.testing.Utils.TestUtils.doProduce;
+import static io.hstream.testing.Utils.TestUtils.makeBufferedProducer;
+import static io.hstream.testing.Utils.TestUtils.randStream;
+import static io.hstream.testing.Utils.TestUtils.randSubscription;
+import static io.hstream.testing.Utils.TestUtils.restartServer;
 
 import io.hstream.BufferedProducer;
 import io.hstream.Consumer;

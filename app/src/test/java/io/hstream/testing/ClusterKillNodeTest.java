@@ -1,16 +1,17 @@
 package io.hstream.testing;
 
 import static io.hstream.testing.ClusterExtension.CLUSTER_SIZE;
-import static io.hstream.testing.TestUtils.buildRecord;
-import static io.hstream.testing.TestUtils.randRawRec;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.writeLog;
+import static io.hstream.testing.Utils.TestUtils.buildRecord;
+import static io.hstream.testing.Utils.TestUtils.randRawRec;
+import static io.hstream.testing.Utils.TestUtils.randStream;
+import static io.hstream.testing.Utils.TestUtils.randSubscription;
+import static io.hstream.testing.Utils.TestUtils.writeLog;
 import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.Consumer;
 import io.hstream.HStreamClient;
 import io.hstream.Producer;
+import io.hstream.testing.Utils.TestUtils;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
