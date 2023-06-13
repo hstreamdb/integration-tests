@@ -1,8 +1,8 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
 import static io.hstream.testing.Utils.ConsumerService.activateSubscription;
 import static io.hstream.testing.Utils.ConsumerService.consume;
+import static io.hstream.testing.Utils.TestUtils.*;
 import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.HServerException;

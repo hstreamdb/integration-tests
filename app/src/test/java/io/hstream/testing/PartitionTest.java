@@ -1,21 +1,22 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
-import static io.hstream.testing.TestUtils.diffAndLogResultSets;
-import static io.hstream.testing.TestUtils.handleForKeys;
-import static io.hstream.testing.TestUtils.handleForKeysSync;
-import static io.hstream.testing.TestUtils.makeBufferedProducer;
-import static io.hstream.testing.TestUtils.produce;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
-import static io.hstream.testing.TestUtils.randSubscriptionWithTimeout;
-import static io.hstream.testing.TestUtils.receiveNRawRecords;
 import static io.hstream.testing.Utils.ConsumerService.consume;
 import static io.hstream.testing.Utils.ConsumerService.startConsume;
+import static io.hstream.testing.Utils.TestUtils.*;
+import static io.hstream.testing.Utils.TestUtils.diffAndLogResultSets;
+import static io.hstream.testing.Utils.TestUtils.handleForKeys;
+import static io.hstream.testing.Utils.TestUtils.handleForKeysSync;
+import static io.hstream.testing.Utils.TestUtils.makeBufferedProducer;
+import static io.hstream.testing.Utils.TestUtils.produce;
+import static io.hstream.testing.Utils.TestUtils.randStream;
+import static io.hstream.testing.Utils.TestUtils.randSubscription;
+import static io.hstream.testing.Utils.TestUtils.randSubscriptionWithTimeout;
+import static io.hstream.testing.Utils.TestUtils.receiveNRawRecords;
 import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.*;
 import io.hstream.testing.Utils.ConsumerService;
+import io.hstream.testing.Utils.TestUtils;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;

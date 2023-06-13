@@ -1,11 +1,10 @@
 package io.hstream.testing.Utils;
 
-import static io.hstream.testing.TestUtils.randText;
+import static io.hstream.testing.Utils.TestUtils.randText;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.util.concurrent.Service;
 import io.hstream.*;
-import io.hstream.testing.TestUtils;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;

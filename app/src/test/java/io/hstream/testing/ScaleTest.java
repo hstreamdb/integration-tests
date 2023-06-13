@@ -1,11 +1,11 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.doProduce;
-import static io.hstream.testing.TestUtils.doProduceAndGatherRid;
-import static io.hstream.testing.TestUtils.makeBufferedProducer;
-import static io.hstream.testing.TestUtils.randRawRec;
-import static io.hstream.testing.TestUtils.randStream;
-import static io.hstream.testing.TestUtils.randSubscription;
+import static io.hstream.testing.Utils.TestUtils.doProduce;
+import static io.hstream.testing.Utils.TestUtils.doProduceAndGatherRid;
+import static io.hstream.testing.Utils.TestUtils.makeBufferedProducer;
+import static io.hstream.testing.Utils.TestUtils.randRawRec;
+import static io.hstream.testing.Utils.TestUtils.randStream;
+import static io.hstream.testing.Utils.TestUtils.randSubscription;
 
 import io.hstream.BufferedProducer;
 import io.hstream.Consumer;

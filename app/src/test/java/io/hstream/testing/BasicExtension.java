@@ -1,7 +1,8 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
+import static io.hstream.testing.Utils.TestUtils.*;
 
+import io.hstream.testing.Utils.TestUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;

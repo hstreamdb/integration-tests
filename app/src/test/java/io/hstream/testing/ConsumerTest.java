@@ -1,11 +1,12 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
 import static io.hstream.testing.Utils.ConsumerService.consume;
+import static io.hstream.testing.Utils.TestUtils.*;
 import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.*;
 import io.hstream.testing.Utils.ConsumerService;
+import io.hstream.testing.Utils.TestUtils;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;

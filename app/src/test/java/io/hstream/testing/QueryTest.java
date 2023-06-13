@@ -1,6 +1,6 @@
 package io.hstream.testing;
 
-import static io.hstream.testing.TestUtils.*;
+import static io.hstream.testing.Utils.TestUtils.*;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import io.hstream.*;

@@ -79,11 +79,11 @@ you can find them from app/build/reports/tests/test/index.html,
 and for each case, the logs path of servers will be printed in the report logs:
 
 ```
-14:22:25.992 [Test worker] INFO  io.hstream.testing.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hserver-0
-14:22:26.148 [Test worker] INFO  io.hstream.testing.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hserver-1
-14:22:26.264 [Test worker] INFO  io.hstream.testing.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hserver-2
-14:22:26.354 [Test worker] INFO  io.hstream.testing.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hstore
-14:22:26.449 [Test worker] INFO  io.hstream.testing.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/zk
+14:22:25.992 [Test worker] INFO  io.hstream.testing.Utils.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hserver-0
+14:22:26.148 [Test worker] INFO  io.hstream.testing.Utils.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hserver-1
+14:22:26.264 [Test worker] INFO  io.hstream.testing.Utils.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hserver-2
+14:22:26.354 [Test worker] INFO  io.hstream.testing.Utils.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/hstore
+14:22:26.449 [Test worker] INFO  io.hstream.testing.Utils.TestUtils - log to .logs/ClusterTest/testMultiThreadDeleteSameStream/f13a413c-4c00-48d1-a6ca-6ba5e276fc01/zk
 ```
 
 For CI in Github, you can download the report and .logs(the logs of server) from Summary

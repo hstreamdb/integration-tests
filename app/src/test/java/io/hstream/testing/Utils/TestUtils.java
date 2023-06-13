@@ -1,4 +1,4 @@
-package io.hstream.testing;
+package io.hstream.testing.Utils;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -195,7 +195,7 @@ public class TestUtils {
         .waitingFor(Wait.forLogMessage(".*LogDevice Cluster running.*", 1));
   }
 
-  static class SecurityOptions {
+  public static class SecurityOptions {
     public String dir;
     public boolean enableTls;
     public String keyPath;
@@ -229,7 +229,7 @@ public class TestUtils {
         .waitingFor(Wait.forLogMessage(".*Server is started on port.*", 1));
   }
 
-  static class HServerCliOpts {
+  public static class HServerCliOpts {
     public int serverId;
     public String address;
     public int port;
@@ -369,7 +369,7 @@ public class TestUtils {
     public List<String> ids;
     public List<String> records;
 
-    RecordsPair() {
+    public RecordsPair() {
       ids = new LinkedList<>();
       records = new LinkedList<>();
     }
@@ -453,7 +453,7 @@ public class TestUtils {
       this.keys = keys;
     }
 
-    RandomKeyGenerator(int keysSize) {
+    public RandomKeyGenerator(int keysSize) {
       this.keys =
           (ArrayList<String>)
               IntStream.range(0, keysSize)
@@ -558,7 +558,7 @@ public class TestUtils {
     int end;
     Random rand = new Random();
 
-    RandomSizeRecordGenerator(int begIncluded, int endExcluded) {
+    public RandomSizeRecordGenerator(int begIncluded, int endExcluded) {
       assert begIncluded > 0 && endExcluded > begIncluded;
       this.beg = begIncluded;
       this.end = endExcluded;
