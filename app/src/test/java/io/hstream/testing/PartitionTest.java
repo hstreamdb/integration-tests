@@ -160,7 +160,7 @@ public class PartitionTest {
     logger.info("wrote:{}", wrote);
     producer.close();
 
-    var sub = randSubscriptionWithTimeout(client, streamName, 5);
+    var sub = randSubscriptionWithTimeoutAndMaxUnack(client, streamName, 5, 100);
     // receive part of records and stop consumers
     final int maxReceivedCountC1 = Math.max(1, globalRandom.nextInt(recordCount / 3));
     final int maxReceivedCountC2 = Math.max(1, globalRandom.nextInt(recordCount / 3));
@@ -173,13 +173,13 @@ public class PartitionTest {
     consume(client, sub, "c1", 10, handleForKeysSync(received, maxReceivedCountC1));
     logger.info("received:{}", received);
     // waiting for server to handler ACKs
-    Thread.sleep(3000);
+    Thread.sleep(500);
 
     // consumer 2
     consume(client, sub, "c2", 10, handleForKeysSync(received, maxReceivedCountC2));
     logger.info("received:{}", received);
     // waiting for server to handler ACKs
-    Thread.sleep(3000);
+    Thread.sleep(500);
 
     // start a new consumer to consume the rest records.
     consume(client, sub, "c3", 10, handleForKeysSync(received, rest));
@@ -237,7 +237,7 @@ public class PartitionTest {
     // sleep more time to make sure all resend records been received. The problem is
     // RecordsPair.insert() method can't identify duplicated records
     // FIXME: this is a workaround, find a better way to avoid sleep
-    Thread.sleep(8000);
+    Thread.sleep(10000);
     f3.stop();
 
     assertThat(diffAndLogResultSetsWithoutDuplicated(wrote, received)).isTrue();
@@ -315,7 +315,7 @@ public class PartitionTest {
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
     final String streamName = randStream(client, 20);
-    final String subscription = randSubscription(client, streamName);
+    final String subscription = randSubscriptionWithTimeout(client, streamName, 5);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
     final int count = 20000;
     final int keysSize = 200;

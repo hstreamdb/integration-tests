@@ -42,7 +42,7 @@ public class TestUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
   private static final DockerImageName defaultHStreamImageName =
-      DockerImageName.parse("hstreamdb/hstream:latest");
+      DockerImageName.parse("hstreamdb/hstream");
   private static final Network test = Network.newNetwork();
 
   public static String randText() {
@@ -844,6 +844,9 @@ public class TestUtils {
   public static Function<ReceivedRawRecord, Boolean> receiveNRawRecords(
       int count, HashMap<String, RecordsPair> received, AtomicInteger receivedCount) {
     return receivedRawRecord -> {
+      if (receivedCount.get() >= count) {
+        return false;
+      }
       var key = receivedRawRecord.getHeader().getPartitionKey();
       received
           .computeIfAbsent(key, v -> new RecordsPair())
