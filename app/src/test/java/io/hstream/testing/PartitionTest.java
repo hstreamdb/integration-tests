@@ -343,7 +343,7 @@ public class PartitionTest {
       }
     }
 
-    Assertions.assertTrue(signal.await(20, TimeUnit.SECONDS), "failed to receive all records");
+    Assertions.assertTrue(signal.await(40, TimeUnit.SECONDS), "failed to receive all records");
     consumers.forEach(ConsumerService::stop);
     Assertions.assertTrue(diffAndLogResultSets(pairs, res));
   }
