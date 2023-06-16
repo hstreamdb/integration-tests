@@ -42,7 +42,7 @@ public class TestUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(TestUtils.class);
   private static final DockerImageName defaultHStreamImageName =
-      DockerImageName.parse("hstreamdb/hstream");
+      DockerImageName.parse("hstreamdb/hstream:latest");
   private static final Network test = Network.newNetwork();
 
   public static String randText() {
@@ -347,10 +347,11 @@ public class TestUtils {
     return r -> {
       synchronized (pairs) {
         var key = r.getHeader().getPartitionKey();
-        pairs
-            .computeIfAbsent(key, v -> new RecordsPair())
-            .insert(r.getRecordId(), Arrays.toString(r.getRawRecord()));
-        latch.countDown();
+        var succ =
+            pairs
+                .computeIfAbsent(key, v -> new RecordsPair())
+                .insertWithoutDuplicated(r.getRecordId(), Arrays.toString(r.getRawRecord()));
+        if (succ) latch.countDown();
         return latch.getCount() > 0;
       }
     };
@@ -400,6 +401,15 @@ public class TestUtils {
     public void insert(String id, String record) {
       ids.add(id);
       records.add(record);
+    }
+
+    public boolean insertWithoutDuplicated(String id, String record) {
+      if (!ids.contains(id)) {
+        ids.add(id);
+        records.add(record);
+        return true;
+      }
+      return false;
     }
   }
 
@@ -473,15 +483,15 @@ public class TestUtils {
     assert payloadSize > 0;
     Random rand = new Random();
     byte[] rRec = new byte[payloadSize];
-    var records = new HashMap<String, LinkedList<String>>();
+    var records = new HashMap<String, ArrayList<String>>();
     var futures = new HashMap<String, List<CompletableFuture<String>>>();
     for (int i = 0; i < totalCount; i++) {
       var key = kg.get();
       rand.nextBytes(rRec);
       Record recordToWrite = Record.newBuilder().partitionKey(key).rawRecord(rRec).build();
       if (!futures.containsKey(key)) {
-        futures.put(key, new LinkedList<>());
-        records.put(key, new LinkedList<>());
+        futures.put(key, new ArrayList<>());
+        records.put(key, new ArrayList<>());
       }
       futures.get(key).add(producer.write(recordToWrite));
       records.get(key).add(Arrays.toString(rRec));
@@ -492,11 +502,46 @@ public class TestUtils {
         (key, v) -> {
           RecordsPair p = new RecordsPair();
           p.records = records.get(key);
-          var ids = new LinkedList<String>();
+          var ids = new ArrayList<String>();
           v.forEach(x -> ids.add(x.join()));
           p.ids = ids;
           res.put(key, p);
         });
+
+    StringBuilder builder = new StringBuilder();
+    var ids = new HashMap<String, Integer>();
+    var total = res.values().stream().map(x -> x.ids.size()).reduce(0, Integer::sum);
+    logger.info("total write records: {}", total);
+    for (var entry : res.entrySet()) {
+      builder
+          .append(("key: "))
+          .append(entry.getKey())
+          .append(", keysize: ")
+          .append(entry.getValue().ids.size())
+          .append(", ids: {");
+      for (var id : entry.getValue().ids) {
+        builder.append(id).append(", ");
+        var items = Strings.split(id, '-');
+
+        var k = items[0] + '-' + items[1];
+        if (!ids.containsKey(k)) {
+          ids.put(k, 0);
+        }
+        ids.put(k, ids.get(k) + 1);
+      }
+      builder.append("}\n");
+    }
+    //    logger.info("================ produce result ================");
+    //    logger.info("{}", builder);
+    //    logger.info("================================================");
+    //
+    //    logger.info("total writes");
+    //    StringBuilder builder1 = new StringBuilder();
+    //    for (var entry : ids.entrySet()) {
+    //      builder1.append("key: ").append(entry.getKey()).append(", count:
+    // ").append(entry.getValue()).append("\n");
+    //    }
+    //    logger.info("{}", builder1);
     return res;
   }
 
@@ -848,11 +893,16 @@ public class TestUtils {
         return false;
       }
       var key = receivedRawRecord.getHeader().getPartitionKey();
-      received
-          .computeIfAbsent(key, v -> new RecordsPair())
-          .insert(
-              receivedRawRecord.getRecordId(), Arrays.toString(receivedRawRecord.getRawRecord()));
-      return receivedCount.incrementAndGet() < count;
+      var succ =
+          received
+              .computeIfAbsent(key, v -> new RecordsPair())
+              .insertWithoutDuplicated(
+                  receivedRawRecord.getRecordId(),
+                  Arrays.toString(receivedRawRecord.getRawRecord()));
+      if (succ) {
+        return receivedCount.incrementAndGet() < count;
+      }
+      return receivedCount.get() < count;
     };
   }
 

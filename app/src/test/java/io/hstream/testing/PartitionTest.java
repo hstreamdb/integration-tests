@@ -207,13 +207,12 @@ public class PartitionTest {
     assertThat(diffAndLogResultSets(pairs, res)).isTrue();
   }
 
-  @Disabled("temporarily disabled because unstable")
   @Test
-  @Timeout(30)
+  @Timeout(60)
   void testReduceConsumerToConsumerGroup() throws Exception {
-    final String streamName = randStream(client, 5);
+    final String streamName = randStream(client, 10);
     final String subscription = randSubscriptionWithTimeout(client, streamName, 5);
-    BufferedProducer producer = makeBufferedProducer(client, streamName, 10);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
     final int count = 5000;
     final int keysSize = 100;
     var wrote = produce(producer, 10, count, keysSize);
@@ -234,11 +233,7 @@ public class PartitionTest {
     }
     f2.stop();
 
-    assertThat(signal.await(20, TimeUnit.SECONDS)).isTrue();
-    // sleep more time to make sure all resend records been received. The problem is
-    // RecordsPair.insert() method can't identify duplicated records
-    // FIXME: this is a workaround, find a better way to avoid sleep
-    Thread.sleep(10000);
+    assertThat(signal.await(40, TimeUnit.SECONDS)).isTrue();
     f3.stop();
 
     assertThat(diffAndLogResultSetsWithoutDuplicated(wrote, received)).isTrue();
@@ -311,41 +306,70 @@ public class PartitionTest {
     assertThat(receivedRids).containsExactlyInAnyOrderElementsOf(rids);
   }
 
-  @Disabled("temporarily disabled because unstable")
   @Timeout(60)
   @Test
   void testDynamicConsumerToConsumerGroup() throws Exception {
-    final String streamName = randStream(client, 20);
+    final String streamName = randStream(client, 5);
     final String subscription = randSubscriptionWithTimeout(client, streamName, 5);
     BufferedProducer producer = makeBufferedProducer(client, streamName, 50);
     final int count = 20000;
-    final int keysSize = 200;
-    CountDownLatch signal = new CountDownLatch(count);
-    var pairs = produce(producer, 100, count, keysSize);
+    final int keysSize = 50;
+    var pairs = produce(producer, 10, count, keysSize);
+    producer.flush();
     producer.close();
+    assertThat(pairs.values().stream().map(r -> r.ids.size()).reduce(0, Integer::sum))
+        .isEqualTo(count);
+
     var res = new HashMap<String, TestUtils.RecordsPair>();
+    CountDownLatch signal = new CountDownLatch(count);
     var consumers = new LinkedList<ConsumerService>();
+    var alived = new HashSet<String>();
+    var died = new HashSet<String>();
     // start 5 consumers
-    for (int i = 0; i < 5; i++) {
-      var consumer = startConsume(client, subscription, handleForKeys(res, signal));
+    int counsumerCount = 5;
+    for (int i = 0; i < counsumerCount; i++) {
+      var consumer = startConsume(client, subscription, "c" + i, handleForKeys(res, signal));
+      alived.add(consumer.getConsumerName());
+      // FIXME: give some time for server to allocate task to consumer
+      Thread.sleep(100);
       consumers.add(consumer);
     }
+
+    // FIXME：give some time for previous consumers to consume some records
+    Thread.sleep(800);
 
     // randomly kill and start some consumers
     for (int i = 0; i < 10; i++) {
       Thread.sleep(100);
-      if (globalRandom.nextInt(4) == 0) {
-        consumers.pop().stop();
-        logger.info("stopped a consumer");
+      if (globalRandom.nextInt(4) % 2 == 0 && !consumers.isEmpty()) {
+        var c = consumers.poll();
+        died.add(c.getConsumerName());
+        alived.remove(c.getConsumerName());
+        c.stop();
+        logger.info("stopped consumer {}", c.getConsumerName());
       } else {
-        var consumer = startConsume(client, subscription, handleForKeys(res, signal));
+        var consumer =
+            startConsume(client, subscription, "c" + counsumerCount, handleForKeys(res, signal));
+        counsumerCount++;
         consumers.add(consumer);
-        logger.info("started a new consumer");
+        alived.add(consumer.getConsumerName());
+        logger.info("started a new consumer {}", consumer.getConsumerName());
       }
     }
 
-    Assertions.assertTrue(signal.await(40, TimeUnit.SECONDS), "failed to receive all records");
+    logger.info(
+        "after random kill and start, alived consumers: [{}], died consumers: [{}]",
+        String.join(",", alived),
+        String.join(",", died));
+
+    assertThat(signal.await(40, TimeUnit.SECONDS))
+        .withFailMessage(
+            "wait consumer timeout, received %d records, expected %d, CountDown latch remained count %d",
+            res.values().stream().map(r -> r.ids.size()).reduce(0, Integer::sum),
+            count,
+            signal.getCount())
+        .isTrue();
     consumers.forEach(ConsumerService::stop);
-    Assertions.assertTrue(diffAndLogResultSets(pairs, res));
+    assertThat(diffAndLogResultSetsWithoutDuplicated(pairs, res)).isTrue();
   }
 }

@@ -167,6 +167,10 @@ public class ConsumerService {
     logger.info("===== consumer {} stopped ======", consumerName);
   }
 
+  public String getConsumerName() {
+    return consumerName;
+  }
+
   private Consumer mkConsumer(
       HStreamClient client,
       String subscription,
