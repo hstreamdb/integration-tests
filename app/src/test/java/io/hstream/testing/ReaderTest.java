@@ -80,7 +80,7 @@ public class ReaderTest {
             .newStreamShardReader()
             .streamName(streamName)
             .shardId(shards.get(0).getShardId())
-            .shardOffset(offset)
+            .from(offset)
             .receiver(
                 records -> {
                   if (terminate.get()) {
@@ -160,7 +160,7 @@ public class ReaderTest {
             .newStreamShardReader()
             .streamName(streamName)
             .shardId(shards.get(0).getShardId())
-            .shardOffset(offset)
+            .from(offset)
             .receiver(
                 records -> {
                   if (terminate.get()) {
@@ -214,7 +214,7 @@ public class ReaderTest {
               .newStreamShardReader()
               .streamName(streamName)
               .shardId(shards.get(i).getShardId())
-              .shardOffset(offset)
+              .from(offset)
               .receiver(
                   records -> {
                     if (terminate.get()) {
