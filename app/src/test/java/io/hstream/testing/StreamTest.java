@@ -8,12 +8,13 @@ import static org.junit.jupiter.params.provider.Arguments.of;
 
 import io.hstream.HServerException;
 import io.hstream.HStreamClient;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import io.hstream.Record;
+import io.hstream.Shard;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.logging.log4j.util.Strings;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -194,5 +195,45 @@ public class StreamTest {
           return res.size() < records.size();
         });
     assertThat(res.size()).isEqualTo(records.size());
+  }
+
+  @Test
+  @Timeout(60)
+  void testGetTailRecordId() {
+    var rand = new Random(System.currentTimeMillis());
+    var streamName = "test_get_tail" + randText();
+    var shardCnt = rand.nextInt(9) + 1;
+    client.createStream(streamName, (short) 1, shardCnt);
+    var producer = client.newProducer().stream(streamName).build();
+    var rIds = new ArrayList<CompletableFuture<String>>();
+    int cnt = 1000;
+    for (int i = 0; i < cnt; i++) {
+      byte[] record = randBytes(10);
+      rIds.add(
+          producer.write(
+              Record.newBuilder()
+                  .rawRecord(record)
+                  .partitionKey(String.valueOf(System.currentTimeMillis()))
+                  .build()));
+    }
+    Map<Long, List<String>> ridMap =
+        client.listShards(streamName).stream()
+            .map(Shard::getShardId)
+            .collect(Collectors.toMap(k -> k, v -> new ArrayList<>()));
+    for (int i = 0; i < cnt; i++) {
+      var rId = rIds.get(i).join();
+      var shardId = rId.split("-")[0];
+      ridMap.get(Long.parseLong(shardId)).add(rId);
+    }
+
+    for (var entry : ridMap.entrySet()) {
+      var shardId = entry.getKey();
+      var rIdsInShard = entry.getValue().stream().sorted().collect(Collectors.toList());
+      logger.info("shardId: {}, rIds: {}\n", shardId, Strings.join(rIdsInShard, ','));
+      var lastRid = rIdsInShard.get(rIdsInShard.size() - 1);
+      var tailRId = client.getTailRecordId(streamName, shardId);
+      assertThat(tailRId).isNotNull();
+      assertThat(tailRId).isEqualTo(lastRid);
+    }
   }
 }
