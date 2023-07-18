@@ -239,7 +239,10 @@ public class StreamTest {
       var lastRid = rIdsInShard.get(rIdsInShard.size() - 1);
       var tailRId = client.getTailRecordId(streamName, shardId);
       assertThat(tailRId).isNotNull();
-      assertThat(tailRId).isEqualTo(lastRid);
+      // FIXME: the returned lsn of getTailLSN method is guaranteed to be higher or equal than the
+      //  LSN of any record that was successfully acknowledged as appended prior to this call.
+      //  Find another way to check the tail record id.
+      assertThat(tailRId).isGreaterThanOrEqualTo(lastRid);
     }
   }
 }
