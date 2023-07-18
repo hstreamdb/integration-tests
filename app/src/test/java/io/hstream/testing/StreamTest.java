@@ -204,6 +204,7 @@ public class StreamTest {
     var streamName = "test_get_tail" + randText();
     var shardCnt = rand.nextInt(9) + 1;
     client.createStream(streamName, (short) 1, shardCnt);
+    logger.info("create stream {} with {} shards", streamName, shardCnt);
     var producer = client.newProducer().stream(streamName).build();
     var rIds = new ArrayList<CompletableFuture<String>>();
     int cnt = 1000;
@@ -229,6 +230,11 @@ public class StreamTest {
     for (var entry : ridMap.entrySet()) {
       var shardId = entry.getKey();
       var rIdsInShard = entry.getValue().stream().sorted().collect(Collectors.toList());
+      if (rIdsInShard.isEmpty()) {
+        logger.info("shardId: {} is empty, skip check.\n", shardId);
+        continue;
+      }
+
       logger.info("shardId: {}, rIds: {}\n", shardId, Strings.join(rIdsInShard, ','));
       var lastRid = rIdsInShard.get(rIdsInShard.size() - 1);
       var tailRId = client.getTailRecordId(streamName, shardId);
