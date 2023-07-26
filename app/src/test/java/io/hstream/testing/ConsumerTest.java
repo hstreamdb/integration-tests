@@ -121,6 +121,66 @@ public class ConsumerTest {
 
   @Test
   @Timeout(60)
+  void test2ConsumerWith1Shard() throws Exception {
+    final String streamName = randStream(client, 1);
+    BufferedProducer producer = makeBufferedProducer(client, streamName, 100);
+    var records = doProduce(producer, 1024, 100);
+    producer.close();
+    final String subscription = randSubscription(client, streamName);
+    Map<String, List<String>> res = new HashMap<>();
+    res.put("c1", new ArrayList<>());
+    res.put("c2", new ArrayList<>());
+    var countDown = new CountDownLatch(records.size());
+
+    var consumer1 =
+        ConsumerService.startConsume(
+            client,
+            subscription,
+            "c1",
+            receivedRawRecord -> {
+              synchronized (res) {
+                res.get("c1").add(Arrays.toString(receivedRawRecord.getRawRecord()));
+              }
+              countDown.countDown();
+              return true;
+            });
+    var consumer2 =
+        ConsumerService.startConsume(
+            client,
+            subscription,
+            "c2",
+            receivedRawRecord -> {
+              synchronized (res) {
+                res.get("c2").add(Arrays.toString(receivedRawRecord.getRawRecord()));
+              }
+              countDown.countDown();
+              return true;
+            });
+    countDown.await(60, TimeUnit.SECONDS);
+    consumer1.stop();
+    consumer2.stop();
+
+    // check that only one consumer received all records
+    if (res.get("c1").isEmpty()) {
+      assertThat(res.get("c2")).containsExactlyInAnyOrderElementsOf(records);
+    } else {
+      assertThat(res.get("c1")).containsExactlyInAnyOrderElementsOf(records);
+    }
+
+    // FIXME: avoid hard code sleep
+    // sleep some time to make sure consumer exit
+    Thread.sleep(2000);
+    var consumers = client.listConsumers(subscription);
+    assertThat(consumers).isEmpty();
+
+    // after consumer stop, there should be no more active consumer binding to subscription
+    client.deleteSubscription(subscription);
+    var subs = client.listSubscriptions();
+    assertThat(subs).isEmpty();
+  }
+
+  @Test
+  @Timeout(60)
   @Tag("ack")
   void testServerResend() throws Exception {
     final String streamName = randStream(client);
