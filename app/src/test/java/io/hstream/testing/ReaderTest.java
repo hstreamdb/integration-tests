@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.hstream.*;
 import io.hstream.testing.Utils.TestUtils;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Random;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -415,5 +415,240 @@ public class ReaderTest {
     }
 
     Assertions.assertEquals(rids.size() - idx, res.size());
+  }
+
+  // ======================== Test for readStreamByKey ============================
+
+  @Test
+  @Timeout(60)
+  void testReadStreamByKeyWithUnExistedKey() throws Exception {
+    var rand = new Random(System.currentTimeMillis());
+    var recordCount = 100;
+    var shardCount = Math.max(1, rand.nextInt(5));
+    var streamName = randStream(client, shardCount);
+    var producer = client.newProducer().stream(streamName).build();
+
+    var records = new HashMap<String, ArrayList<Record>>();
+    var rids = new ArrayList<String>();
+    for (int i = 0; i < recordCount; i++) {
+      var key = "key_" + (i % 10);
+      var record =
+          Record.newBuilder().hRecord(HRecord.newBuilder().put("index", i).build()).build();
+      record.setPartitionKey(key);
+      records.computeIfAbsent(key, k -> new ArrayList<>()).add(record);
+      rids.add(producer.write(record).join());
+    }
+
+    var res = new ArrayList<ReceivedRecord>();
+    StreamKeyReader streamShardReader =
+        client
+            .newStreamKeyReader()
+            .streamName(streamName)
+            .key("key-11")
+            .from(new StreamShardOffset(StreamShardOffset.SpecialOffset.EARLIEST))
+            .until(new StreamShardOffset(rids.get(rids.size() - 1)))
+            .bufferSize(100)
+            .build();
+    while (streamShardReader.hasNext()) {
+      ReceivedRecord receivedRecord = streamShardReader.next();
+      if (receivedRecord == null) break;
+      res.add(receivedRecord);
+    }
+
+    streamShardReader.close();
+    assertThat(res.isEmpty()).as("read un-existed key should return empty list").isTrue();
+  }
+
+  @Test
+  @Timeout(60)
+  void testReadStreamByKeyFromUnBatchedRecords() throws Exception {
+    var rand = new Random(System.currentTimeMillis());
+    var keyCount = 50;
+    var recordCount = 1000;
+    var shardCount = Math.max(1, rand.nextInt(5));
+    var streamName = randStream(client, shardCount);
+    var producer = client.newProducer().stream(streamName).build();
+
+    var records = new HashMap<String, ArrayList<Record>>();
+    var rids = new ArrayList<String>();
+    var readKey = "key_" + rand.nextInt(keyCount);
+    var lastIdxForReadKey = 0;
+    for (int i = 0; i < recordCount; i++) {
+      if (i % 10 == 0) {
+        Thread.sleep(20);
+      }
+      var key = "key_" + rand.nextInt(keyCount);
+      var ts = System.currentTimeMillis();
+      var record =
+          Record.newBuilder()
+              .hRecord(
+                  HRecord.newBuilder().put("index", i).put("timestamp", ts).put("key", key).build())
+              .build();
+      record.setPartitionKey(key);
+      records.computeIfAbsent(key, k -> new ArrayList<>()).add(record);
+      rids.add(producer.write(record).join());
+      if (key.equals(readKey)) {
+        lastIdxForReadKey = i;
+      }
+    }
+
+    StreamKeyReader streamShardReader =
+        client
+            .newStreamKeyReader()
+            .streamName(streamName)
+            .key(readKey)
+            .from(new StreamShardOffset(StreamShardOffset.SpecialOffset.EARLIEST))
+            .until(new StreamShardOffset(rids.get(lastIdxForReadKey)))
+            .bufferSize(100)
+            .build();
+
+    var receivedRecords = new ArrayList<ReceivedRecord>();
+    var lastIndex = 0;
+    while (streamShardReader.hasNext()) {
+      ReceivedRecord receivedRecord = streamShardReader.next();
+      if (receivedRecord == null) break;
+
+      var index = receivedRecord.getRecord().getHRecord().getInt("index");
+      assertThat(index).isGreaterThan(lastIndex);
+      assertThat(receivedRecord.getRecord().getPartitionKey()).isEqualTo(readKey);
+      receivedRecords.add(receivedRecord);
+      lastIndex = index;
+    }
+
+    Thread.sleep(2000);
+    streamShardReader.close();
+
+    var targetRecords = records.get(readKey);
+    logger.info("write {} records for key {}: ", targetRecords.size(), readKey);
+
+    for (var record : targetRecords) {
+      var hrecord = record.getHRecord();
+      logger.info(
+          "{}: index={}, timstamp={}",
+          rids.get(hrecord.getInt("index")),
+          hrecord.getInt("index"),
+          hrecord.getInt("timestamp"));
+    }
+
+    logger.info("read {} records for key {}: ", receivedRecords.size(), readKey);
+    for (var receivedRecord : receivedRecords) {
+      var hrecord = receivedRecord.getRecord().getHRecord();
+      logger.info(
+          "{}: index={}, timstamp={}",
+          receivedRecord.getRecordId(),
+          hrecord.getInt("index"),
+          hrecord.getInt("timestamp"));
+    }
+
+    assertThat(receivedRecords.size()).isEqualTo(records.get(readKey).size());
+
+    for (int i = 0; i < receivedRecords.size(); i++) {
+      assertThat(receivedRecords.get(i).getRecordId())
+          .isEqualTo(rids.get(targetRecords.get(i).getHRecord().getInt("index")));
+      assertThat(receivedRecords.get(i).getRecord().getHRecord().getInt("index"))
+          .isEqualTo(targetRecords.get(i).getHRecord().getInt("index"));
+      assertThat(receivedRecords.get(i).getRecord().getHRecord().getInt("timestamp"))
+          .isEqualTo(targetRecords.get(i).getHRecord().getInt("timestamp"));
+    }
+  }
+
+  @Test
+  @Timeout(60)
+  void testReadStreamByKeyFromBatchedRecords() throws Exception {
+    var rand = new Random(System.currentTimeMillis());
+    var keyCount = 50;
+    var recordCount = 1000;
+    var shardCount = Math.max(1, rand.nextInt(5));
+    var streamName = randStream(client, shardCount);
+    var producer =
+        client.newBufferedProducer().stream(streamName)
+            .batchSetting(
+                BatchSetting.newBuilder().recordCountLimit(15).ageLimit(10).bytesLimit(-1).build())
+            .build();
+
+    var records = new HashMap<String, ArrayList<Record>>();
+    var rids = new HashMap<String, ArrayList<String>>();
+    var futures = new ArrayList<CompletableFuture<Void>>();
+    var readKey = "key_" + rand.nextInt(keyCount);
+    for (int i = 0; i < recordCount; i++) {
+      if (i % 10 == 0) {
+        Thread.sleep(20);
+      }
+      var key = "key_" + rand.nextInt(keyCount);
+      var ts = Instant.now().toEpochMilli();
+      var record =
+          Record.newBuilder()
+              .hRecord(
+                  HRecord.newBuilder().put("index", i).put("timestamp", ts).put("key", key).build())
+              .build();
+      record.setPartitionKey(key);
+      records.computeIfAbsent(key, k -> new ArrayList<>()).add(record);
+      futures.add(
+          producer
+              .write(record)
+              .thenAccept(rid -> rids.computeIfAbsent(key, k -> new ArrayList<>()).add(rid)));
+    }
+
+    futures.forEach(CompletableFuture::join);
+
+    var targetRids = rids.get(readKey);
+
+    StreamKeyReader streamShardReader =
+        client
+            .newStreamKeyReader()
+            .streamName(streamName)
+            .key(readKey)
+            .from(new StreamShardOffset(StreamShardOffset.SpecialOffset.EARLIEST))
+            .until(new StreamShardOffset(targetRids.get(targetRids.size() - 1)))
+            .bufferSize(100)
+            .build();
+
+    var receivedRecords = new ArrayList<ReceivedRecord>();
+    var lastIndex = 0;
+    while (streamShardReader.hasNext()) {
+      ReceivedRecord receivedRecord = streamShardReader.next();
+      if (receivedRecord == null) break;
+
+      var index = receivedRecord.getRecord().getHRecord().getInt("index");
+      assertThat(index).isGreaterThan(lastIndex);
+      assertThat(receivedRecord.getRecord().getPartitionKey()).isEqualTo(readKey);
+      receivedRecords.add(receivedRecord);
+      lastIndex = index;
+    }
+
+    Thread.sleep(2000);
+    streamShardReader.close();
+
+    var targetRecords = records.get(readKey);
+    logger.info("write {} records for key {}: ", targetRecords.size(), readKey);
+
+    for (int i = 0; i < targetRecords.size(); i++) {
+      var hrecord = targetRecords.get(i).getHRecord();
+      logger.info(
+          "{}: index={}, timstamp={}",
+          targetRids.get(i),
+          hrecord.getInt("index"),
+          hrecord.getInt("timestamp"));
+    }
+
+    logger.info("read {} records for key {}: ", receivedRecords.size(), readKey);
+    for (var receivedRecord : receivedRecords) {
+      var hrecord = receivedRecord.getRecord().getHRecord();
+      logger.info(
+          "{}: index={}, timstamp={}",
+          receivedRecord.getRecordId(),
+          hrecord.getInt("index"),
+          hrecord.getInt("timestamp"));
+    }
+
+    assertThat(receivedRecords.size()).isEqualTo(records.get(readKey).size());
+
+    for (int i = 0; i < receivedRecords.size(); i++) {
+      assertThat(receivedRecords.get(i).getRecordId()).isEqualTo(targetRids.get(i));
+      assertThat(receivedRecords.get(i).getRecord().getHRecord().getInt("index"))
+          .isEqualTo(targetRecords.get(i).getHRecord().getInt("index"));
+      assertThat(receivedRecords.get(i).getRecord().getHRecord().getInt("timestamp"))
+          .isEqualTo(targetRecords.get(i).getHRecord().getInt("timestamp"));
+    }
   }
 }
