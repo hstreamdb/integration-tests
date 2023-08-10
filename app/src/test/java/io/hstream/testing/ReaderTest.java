@@ -503,7 +503,7 @@ public class ReaderTest {
             .build();
 
     var receivedRecords = new ArrayList<ReceivedRecord>();
-    var lastIndex = 0;
+    var lastIndex = -1;
     while (streamShardReader.hasNext()) {
       ReceivedRecord receivedRecord = streamShardReader.next();
       if (receivedRecord == null) break;
@@ -604,7 +604,7 @@ public class ReaderTest {
             .build();
 
     var receivedRecords = new ArrayList<ReceivedRecord>();
-    var lastIndex = 0;
+    var lastIndex = -1;
     while (streamShardReader.hasNext()) {
       ReceivedRecord receivedRecord = streamShardReader.next();
       if (receivedRecord == null) break;
