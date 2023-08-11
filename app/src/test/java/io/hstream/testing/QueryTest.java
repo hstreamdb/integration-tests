@@ -32,6 +32,7 @@ public class QueryTest {
     this.hserverUrls = hserverUrls;
   }
 
+  @Disabled("Java client does not support `registerSchema` now")
   @Test
   void testCreateQuery() throws Exception {
     String source = randStream(client);
