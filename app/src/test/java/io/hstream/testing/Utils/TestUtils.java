@@ -138,7 +138,7 @@ public class TestUtils {
   // -----------------------------------------------------------------------------------------------
 
   public static GenericContainer<?> makeZooKeeper() {
-    return new GenericContainer<>(DockerImageName.parse("zookeeper"))
+    return new GenericContainer<>(DockerImageName.parse("zookeeper:3.8"))
         .withNetwork(test)
         .withNetworkAliases("zookeeper");
   }
