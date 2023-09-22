@@ -246,10 +246,13 @@ public class PartitionTest {
     final String subscription = randSubscription(client, streamName);
     io.hstream.Producer producer = client.newProducer().stream(streamName).build();
     int count = 2000;
-    byte[] rRec = new byte[100];
+    byte[] rRec = new byte[10];
     var rids = new ArrayList<String>();
     var writes = new ArrayList<CompletableFuture<String>>();
     for (int i = 0; i < count; i++) {
+      if (i % 50 == 0) {
+        Thread.sleep(10);
+      }
       writes.add(
           producer.write(Record.newBuilder().rawRecord(rRec).partitionKey("k_" + i % 10).build()));
     }
