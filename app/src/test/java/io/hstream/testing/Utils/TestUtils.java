@@ -135,6 +135,7 @@ public class TestUtils {
     logger.info(query.getQueryText() + " has been created");
     return query.getName();
   }
+
   // -----------------------------------------------------------------------------------------------
 
   public static GenericContainer<?> makeZooKeeper() {
