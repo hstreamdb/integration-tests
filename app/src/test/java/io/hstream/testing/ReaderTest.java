@@ -8,6 +8,7 @@ import io.hstream.testing.Utils.TestUtils;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -567,7 +568,7 @@ public class ReaderTest {
             .build();
 
     var records = new HashMap<String, ArrayList<Record>>();
-    var rids = new HashMap<String, ArrayList<String>>();
+    var rids = new ConcurrentHashMap<String, ArrayList<String>>();
     var futures = new ArrayList<CompletableFuture<Void>>();
     var readKey = "key_" + rand.nextInt(keyCount);
     for (int i = 0; i < recordCount; i++) {
@@ -599,7 +600,7 @@ public class ReaderTest {
             .streamName(streamName)
             .key(readKey)
             .from(new StreamShardOffset(StreamShardOffset.SpecialOffset.EARLIEST))
-            .until(new StreamShardOffset(targetRids.get(targetRids.size() - 1)))
+            .until(new StreamShardOffset(StreamShardOffset.SpecialOffset.LATEST))
             .bufferSize(100)
             .build();
 

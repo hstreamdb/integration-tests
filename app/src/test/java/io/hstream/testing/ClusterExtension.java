@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 
 public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
 
@@ -78,10 +79,8 @@ public class ClusterExtension implements BeforeEachCallback, AfterEachCallback {
     }
     seedNodes = hserverInnerUrls.stream().reduce((url1, url2) -> url1 + "," + url2).get();
     hservers.addAll(bootstrapHServerCluster(hserverConfs, hserverInnerUrls, dataDir));
-    Thread.sleep(5000);
+    hservers.forEach(h -> h.waitingFor(Wait.forLogMessage(".*Cluster is ready!.*", 1)));
     hservers.stream().forEach(h -> logger.info(h.getLogs()));
-    // Thread.sleep(50000);
-    // hservers.stream().forEach(h -> hserverUrls.add(h.getHost() + ":" + h.getFirstMappedPort()));
 
     Object testInstance = context.getRequiredTestInstance();
     var initUrl =
