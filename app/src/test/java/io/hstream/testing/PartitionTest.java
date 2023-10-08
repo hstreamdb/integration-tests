@@ -245,13 +245,15 @@ public class PartitionTest {
     final String streamName = randStream(client, 20);
     final String subscription = randSubscription(client, streamName);
     io.hstream.Producer producer = client.newProducer().stream(streamName).build();
-    int count = 2000;
     byte[] rRec = new byte[10];
     var rids = new ArrayList<String>();
     var writes = new ArrayList<CompletableFuture<String>>();
+    // NOTE: parallel should not be too large, otherwise the store server will
+    // reject the request. Especially for github ci environment.
+    int count = 2000;
     for (int i = 0; i < count; i++) {
-      if (i % 50 == 0) {
-        Thread.sleep(10);
+      if (i % 20 == 0) {
+        Thread.sleep(500);
       }
       writes.add(
           producer.write(Record.newBuilder().rawRecord(rRec).partitionKey("k_" + i % 10).build()));
