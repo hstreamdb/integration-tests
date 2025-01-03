@@ -91,7 +91,7 @@ jobs:
         run: |
           echo "${{ matrix.test_class }}" | tr -d '\n' | xargs -d ',' -n1 ./gradlew test -i --tests
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
           name: ${{ matrix.name }}-logs-artifact
